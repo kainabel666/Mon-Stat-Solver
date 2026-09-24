@@ -206,9 +206,7 @@ Changes happen in two steps: **Apply** writes the monster you're editing into th
 
 Every stat follows one rule: the monstats.txt value is multiplied by a monlvl.txt factor for the monster's level and divided by 100, with any remainder dropped.
 
-```latex
-\text{in game} = \left\lfloor \frac{\text{monstats value} \times \text{monlvl factor}}{100} \right\rfloor
-```
+IN GAME = ((MONSTATS VALUE x MONLVL VALUE)/100)
 
 The solver uses the monlvl.txt L- columns, which are the ones single player and TCP/IP games use. Nightmare and Hell use the (N) and (H) versions of each column.
 
@@ -226,9 +224,7 @@ Durations are not scaled by level.
 
 The scaled damage times 10 is the rate the game applies each frame, in 1/256ths of a point. The duration is doubled, and the total shown in game is the rate times the frames, divided by 256.
 
-```latex
-\text{total} = \left\lfloor \frac{\text{scaled damage} \times 10 \times \text{duration} \times 2}{256} \right\rfloor
-```
+TOTAL = ((SCALED DAMAGE x 10 x duration x 2)/256)
 
 For example, 5 scaled damage with a duration of 100 deals 5 × 10 × 200 ÷ 256 = 39 damage over 8 seconds.
 
