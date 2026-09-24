@@ -260,9 +260,9 @@ dialog .row { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wra
     <div class="dfhead">
       <div>
         <h2>Data folder</h2>
-        <p id="dfStatus">Select your mod's <code>data</code> folder, or drop it here. The page reads the .txt files from <code>global/excel</code> and the .json files from <code>local/lng/strings</code>. Your browser may ask you to confirm; nothing is uploaded.</p>
+        <p id="dfStatus">Select your mod's <code>data</code> folder, or drop it here. The page reads the .txt files from <code>global/excel</code> and the .json files from <code>local/lng/strings</code>. Your browser asks once to let the page view the folder; only the files listed below are opened, and nothing is uploaded.</p>
       </div>
-      <label class="btn primary" for="dfInput">Select data folder</label>
+      <button class="btn primary" type="button" id="dfPick">Select data folder</button>
       <input type="file" id="dfInput" webkitdirectory directory multiple>
     </div>
     <details class="dflist" id="dfList">
@@ -2475,14 +2475,20 @@ function findDataFile(entries, df) {
   const pool = byPath.length ? byPath : entries.filter(e => e.path === df.name.toLowerCase() || e.path.endsWith("/" + df.name.toLowerCase()));
   return pool.sort((a, b) => a.path.length - b.path.length)[0] || null;
 }
-async function onDataFolder(entries) {
-  if (!entries.length) return;
+async function onDataFolder(entries, rootName) {
+  if (!entries.length) {
+    const msg = $("#dfStatus");
+    msg.textContent = `${rootName || "That folder"} doesn't contain global/excel/monstats.txt. Select your mod's data folder.`;
+    msg.className = "err";
+    status("That folder isn't a data folder; nothing was changed.", "warn");
+    return;
+  }
   if (S.dirty || pending() > 0) {
     const v = await ask("The current monstats.txt has edits that haven't been downloaded. Load the new folder anyway?",
       [["Cancel", "cancel"], ["Load folder", "load", true]]);
     if (v !== "load") return;
   }
-  const root = entries[0].path.split("/")[0];
+  const root = rootName || entries[0].path.split("/")[0];
   const msDf = DATA_FILES.find(df => df.name === "monstats.txt");
   if (!findDataFile(entries, msDf)) {
     const msg = $("#dfStatus");
@@ -2511,37 +2517,105 @@ async function onDataFolder(entries) {
   if (S.ms) status(`Loaded ${S.ms.order.length} monsters from ${root}. Type in the Monster box to find one.`, "ok");
   render();
 }
-// Walk a dropped folder (DataTransferItem entries) into { path, file } pairs
-async function walkEntry(entry, prefix, out) {
-  if (entry.isFile) {
-    const file = await new Promise((res, rej) => entry.file(res, rej));
-    out.push({ path: (prefix + entry.name).toLowerCase(), file });
-  } else if (entry.isDirectory) {
-    const reader = entry.createReader();
-    for (;;) {
-      const batch = await new Promise((res, rej) => reader.readEntries(res, rej));
-      if (!batch.length) break;
-      for (const e of batch) await walkEntry(e, prefix + entry.name + "/", out);
+// ---- Open only the files the page needs ----
+// Two folder APIs share one lookup: FileSystemDirectoryHandle (picker / Chrome drop) and FileSystemEntry (other drops).
+const FS = {
+  async children(dir) {
+    const out = [];
+    if (dir.entries) {                        // FileSystemDirectoryHandle
+      for await (const [name, h] of dir.entries()) out.push({ name, isDir: h.kind === "directory", node: h });
+    } else {                                  // FileSystemDirectoryEntry
+      const reader = dir.createReader();
+      for (;;) {
+        const batch = await new Promise((res, rej) => reader.readEntries(res, rej));
+        if (!batch.length) break;
+        for (const e of batch) out.push({ name: e.name, isDir: e.isDirectory, node: e });
+      }
+    }
+    return out;
+  },
+  async file(node) { return node.getFile ? node.getFile() : new Promise((res, rej) => node.file(res, rej)); },
+};
+async function subDir(dir, parts) {
+  for (const part of parts) {
+    const kid = (await FS.children(dir)).find(c => c.isDir && c.name.toLowerCase() === part);
+    if (!kid) return null;
+    dir = kid.node;
+  }
+  return dir;
+}
+// The folder holding global/excel: the one picked, or data / <mod>.mpq / mods below it (a few levels, directories only)
+async function findDataBase(dir, depth = 0) {
+  if (await subDir(dir, ["global", "excel"])) return dir;
+  if (depth >= 3) return null;
+  const kids = (await FS.children(dir)).filter(c => c.isDir);
+  const rank = n => n === "data" ? 0 : n.endsWith(".mpq") ? 1 : n === "mods" ? 2 : 3;
+  const next = kids.filter(c => depth === 0 || rank(c.name.toLowerCase()) < 3).sort((x, y) => rank(x.name.toLowerCase()) - rank(y.name.toLowerCase()));
+  for (const c of next) { const b = await findDataBase(c.node, depth + 1); if (b) return b; }
+  return null;
+}
+// Collect just the DATA_FILES from the two folders that hold them
+async function collectDataFiles(root) {
+  const base = await findDataBase(root);
+  if (!base) return [];
+  const out = [];
+  for (const dir of ["global/excel", "local/lng/strings"]) {
+    const d = await subDir(base, dir.split("/"));
+    if (!d) continue;
+    const wanted = new Set(DATA_FILES.filter(f => f.dir === dir).map(f => f.name));
+    for (const c of await FS.children(d)) {
+      const n = c.name.toLowerCase();
+      if (!c.isDir && wanted.has(n)) out.push({ path: `${dir}/${n}`, file: await FS.file(c.node) });
     }
   }
+  return out;
+}
+async function openDataRoot(root) {
+  status(`Looking in ${root.name}\u2026`);
+  const entries = await collectDataFiles(root);
+  if (!entries.length) {
+    const msg = $("#dfStatus");
+    msg.textContent = `${root.name} doesn't contain global/excel/monstats.txt. Select your mod's data folder.`;
+    msg.className = "err";
+    status("That folder isn't a data folder; nothing was changed.", "warn");
+    return;
+  }
+  onDataFolder(entries, root.name);
 }
 function wireDataFolder() {
   const input = $("#dfInput"), panel = $("#dataPanel");
+  // Chrome and Edge: a folder picker that opens only what the page asks for
+  $("#dfPick").addEventListener("click", async () => {
+    if (window.showDirectoryPicker) {
+      let dir;
+      try { dir = await window.showDirectoryPicker({ id: "d2r-data", mode: "read" }); }
+      catch (err) { if (err.name !== "AbortError") status("Couldn't open that folder: " + err.message, "err"); return; }
+      openDataRoot(dir);
+    } else input.click();
+  });
+  // Other browsers: the classic folder input lists the folder, but only the needed files are read
   input.addEventListener("change", () => {
-    const entries = [...input.files].map(file => ({ path: (file.webkitRelativePath || file.name).replace(/\\/g, "/").toLowerCase(), file }));
+    const wanted = new Set(DATA_FILES.map(f => f.name));
+    const entries = [...input.files]
+      .map(file => ({ path: (file.webkitRelativePath || file.name).replace(/\\/g, "/").toLowerCase(), file }))
+      .filter(e => wanted.has(e.path.split("/").pop()));
+    const root = input.files[0] ? (input.files[0].webkitRelativePath || "").split("/")[0] : "";
     input.value = "";
-    onDataFolder(entries);
+    onDataFolder(entries, root);
   });
   panel.addEventListener("dragover", e => { e.preventDefault(); panel.classList.add("drag"); });
   panel.addEventListener("dragleave", () => panel.classList.remove("drag"));
   panel.addEventListener("drop", async e => {
     e.preventDefault(); panel.classList.remove("drag");
-    const out = [];
-    for (const item of [...e.dataTransfer.items]) {
-      const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
-      if (entry) await walkEntry(entry, "", out);
+    const item = [...e.dataTransfer.items].find(i => i.kind === "file");
+    if (!item) return;
+    const handle = item.getAsFileSystemHandle ? await item.getAsFileSystemHandle() : null;
+    const root = handle && handle.kind === "directory" ? handle : item.webkitGetAsEntry?.();
+    if (!root || (root.isDirectory === false) || (handle && handle.kind !== "directory")) {
+      status("Drop the data folder itself, not a file.", "warn");
+      return;
     }
-    onDataFolder(out);
+    openDataRoot(root);
   });
 }
 function renderDataFolder() {
