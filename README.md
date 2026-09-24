@@ -3,6 +3,7 @@ A tool to help calculate real in game numbers and help balance monster toughness
 
 Sep 24, 2026 · @KainAbel666 created with Claude
 
+
 ## What the tool does
 
 You tell the Monster Stat Solver how tough you want a monster to be in game, and it tells you what to type into monstats.txt to get exactly that.
@@ -13,10 +14,10 @@ It is built for modders. It runs entirely in your web browser from a single page
 
 ## Quick start
 
-You can make your first change in about five minutes with just your mod's monstats.txt.
+You can make your first change in about five minutes with just your mod's data folder.
 
 1. Open the solver page. A copy of monlvl.txt is built in, so you can skip that file for now.
-2. On the **monstats.txt** card, click **Choose file** (or drag the file onto the card) and pick your mod's monstats.txt.
+2. Click **Select data folder** (or drag the folder onto that panel) and choose your mod's `data` folder, the one that holds `global` and `local`. If your browser asks you to confirm, say yes; nothing is uploaded.
 3. Click the **Monster** box and start typing, for example `zombie`. Pick **zombie1 (Zombie)** from the list.
 4. The grid fills with the monster's current values. In the **Hell** column, change the **Min HP** target to `6000` and **Max HP** to `8000`.
 5. Look at the **Input** column next to each target. That is the number monstats.txt needs. Gold means it will change.
@@ -27,26 +28,28 @@ That's the whole loop: pick a monster, type the in-game values you want, apply, 
 
 ## The data files
 
-Only monstats.txt is needed to edit monsters; every other file makes the numbers more accurate or the lists easier to read. Load each one on its card at the top of the page, either with **Choose file** or by dragging the file onto the card.
+You load everything at once by picking your mod's `data` folder. Click **Select data folder** at the top of the page, or drag the folder onto that panel. The page reads the .txt files from `global/excel` and the .json files from `local/lng/strings`, and ignores everything else. You can also pick a folder above `data`, such as the mod's own folder. Only monstats.txt is required; the other files make the numbers more accurate or the lists easier to read.
 
-| File | Needed? | Where to find it | What it adds |
+| File | Needed? | Folder | What it adds |
 | --- | --- | --- | --- |
-| monstats.txt | Yes | `data/global/excel` | The monsters you edit. The download is this file with your changes. |
-| monlvl.txt | Built in | `data/global/excel` | The level scaling tables. Load your mod's copy if it changes them. |
-| levels.txt | Optional | `data/global/excel` | Areas, their monster levels and which monsters spawn where. |
-| levels.json | Optional | `data/local/lng/strings` | English area names instead of internal keys. |
-| monsters.json | Optional | `data/local/lng/strings` | English monster names instead of internal keys. |
-| elemtypes.txt | Optional | `data/global/excel` | Your mod's list of element types. A standard list is built in. |
-| monai.txt | Optional | `data/global/excel` | Every AI type, plus what each AI parameter does. |
-| MonProp.txt | Optional | `data/global/excel` | The extra properties each monster gets, such as resistances or auras. |
-| properties.txt | Optional | `data/global/excel` | Turns property codes into the stats they set. |
-| itemstatcost.txt | Optional | `data/global/excel` | How each stat is described in game. |
-| skills.txt | Optional | `data/global/excel` | Skill names for chance-to-cast, aura and +skill properties. |
-| item-modifiers.json | Optional | `data/local/lng/strings` | The English text for property descriptions. |
+| monstats.txt | Yes | `global/excel` | The monsters you edit. The download is this file with your changes. |
+| monlvl.txt | Built in | `global/excel` | The level scaling tables. The built-in copy is used if your mod doesn't have one. |
+| levels.txt | Optional | `global/excel` | Areas, their monster levels and which monsters spawn where. |
+| elemtypes.txt | Optional | `global/excel` | Your mod's list of element types. A standard list is built in. |
+| monai.txt | Optional | `global/excel` | Every AI type, plus what each AI parameter does. |
+| monprop.txt | Optional | `global/excel` | The extra properties each monster gets, such as resistances or auras. |
+| properties.txt | Optional | `global/excel` | Turns property codes into the stats they set. |
+| itemstatcost.txt | Optional | `global/excel` | How each stat is described in game. |
+| skills.txt | Optional | `global/excel` | Skill names for chance-to-cast, aura and +skill properties. |
+| levels.json | Optional | `local/lng/strings` | English area names instead of internal keys. |
+| monsters.json | Optional | `local/lng/strings` | English monster names instead of internal keys. |
+| item-modifiers.json | Optional | `local/lng/strings` | The English text for property descriptions. |
 
-The last five files sit in their own **Monster properties** row of cards and work together to describe a monster's MonProp.txt properties.
+Your browser may ask you to confirm before it lets the page read a folder, sometimes worded as uploading files. Nothing leaves your computer; the files are read inside the page.
 
-Each card shows what it loaded, such as "751 monsters" or "4 of 6 areas matched". If a file is the wrong one or is missing a column, the card says so in red and names what's missing.
+After loading, the panel says how many files it found, such as "Loaded 12 of 12 files from data", and names any that are missing. Open **Files the page uses** for each file's folder and what was loaded. If the folder has no `global/excel/monstats.txt`, nothing changes and the panel tells you to pick the data folder.
+
+Picking a different mod's folder replaces everything from the last one. Optional files the new mod doesn't have are cleared, so two mods never mix, and a missing monlvl.txt falls back to the built-in copy.
 
 The page remembers your files in this browser, so they are still there next time you open it. Your applied edits are remembered too. Use **Forget files** at the bottom to clear everything.
 
@@ -59,6 +62,10 @@ A monster's stats depend on its level, and in Nightmare and Hell that level come
 Type in the **Monster** box to search by Id, English name or name key. Each result shows the levels that monster will have, as Normal / Nightmare / Hell. A small "4 areas" note means it spawns in several places, and the levels show as a range.
 
 Then use the **Area** box to pick where it spawns. Areas where the monster appears are listed first under "Where zombie1 spawns".
+
+You can also type an area name in the **Monster** box. Every monster that spawns there is listed, tagged with the area, such as "in Den of Evil", and picking one selects both the monster and that area.
+
+Long lists stop after the first few hundred entries. Pick **Show all** at the bottom of the list to see the rest; the list stays open where you were.
 
 The page picks the area for you when it can:
 
@@ -73,6 +80,8 @@ This mode puts everything in one list. Areas appear in levels.txt order, each wi
 - Type an area name to see all its monsters, or a monster name to see every area it's in.
 - A monster can only be picked where it first appears. Later appearances are greyed out and name the first area, for example "Zombie (Blood Moor)".
 - To use a monster with a different area, switch back to **Monster, then area** and pick the area there.
+
+A **Jump to** row at the top of the list has a button for each act. Clicking one shows the whole list and scrolls to that act's first area, without hiding the other acts. The row stays in view as you scroll, and **Show all** works here too.
 
 ### Normal uses area level
 
@@ -226,6 +235,8 @@ For example, 5 scaled damage with a duration of 100 deals 5 × 10 × 200 ÷ 256 
 ## Troubleshooting
 
 **The monster is weaker in game than the page says.** The most common cause is the level. Regular Nightmare and Hell monsters use the area's level, so load levels.txt and pick the right area. Also remember each monster rolls its HP between Min and Max; set both to the same value for a clean test.
+
+**The page says the folder isn't a data folder.** It couldn't find monstats.txt anywhere in what you picked. Select the mod's `data` folder, or a folder above it. Picking the `excel` folder alone loads the .txt files but misses the .json name files, which live under `local/lng/strings`.
 
 **My changes don't show up in game at all.** Check that the downloaded file replaced the one your mod actually loads, in the right `data/global/excel` folder. A leftover monstats.bin, or another mod layer with its own monstats.txt, can override it.
 
