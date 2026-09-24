@@ -1,0 +1,2637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Monster stat solver for D2R</title>
+<meta name="description" content="Turn the monster stats you want in Diablo II Resurrected into the values monstats.txt needs, using monlvl.txt.">
+<meta name="color-scheme" content="dark">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Alegreya+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #16120e;
+  --bg2: #1d1712;
+  --panel: #231c15;
+  --well: #0f0c09;
+  --line: #3a2f23;
+  --line2: #574633;
+  --text: #ddd0b3;
+  --dim: #968770;
+  --faint: #5f5447;
+  --gold: #c9b27a;
+  --orange: #e39a3b;
+  --red: #e05c49;
+  --display: "Cinzel", "Trajan Pro", Georgia, serif;
+  --ui: "Alegreya Sans", "Segoe UI", system-ui, sans-serif;
+  --row: 30px;
+}
+* { box-sizing: border-box; }
+html { background: var(--bg); color: var(--text); font: 16px/1.45 var(--ui); }
+body { margin: 0; min-height: 100vh; background: radial-gradient(1200px 500px at 30% -10%, #2a2017 0%, transparent 70%), var(--bg); }
+button, input { font: inherit; color: inherit; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 28px 20px 0; }
+
+/* Header */
+header { display: grid; grid-template-columns: 1fr; gap: 6px; margin-bottom: 22px; }
+h1 { font: 700 clamp(1.7rem, 3.2vw, 2.4rem)/1.1 var(--display); letter-spacing: .02em; margin: 0; color: var(--gold); }
+.lede { margin: 0; max-width: 68ch; color: var(--dim); }
+
+/* Files */
+.datafolder { margin-bottom: 18px; padding: 14px 16px; background: var(--panel); border: 1px dashed var(--line2); border-radius: 8px; }
+.datafolder.drag { border-color: var(--gold); background: #2b2219; }
+.dfhead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 20px; }
+.dfhead h2 { margin: 0 0 2px; font: 600 1.05rem var(--ui); color: var(--gold); }
+.dfhead p { margin: 0; max-width: 78ch; color: var(--dim); font-size: .92rem; }
+.dfhead p.ok { color: var(--text); } .dfhead p.warn { color: var(--orange); } .dfhead p.err { color: var(--red); }
+#dfInput { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.dflist { margin-top: 10px; }
+.dflist summary { cursor: pointer; color: var(--dim); font-size: .92rem; }
+.dftable { width: 100%; min-width: 0; margin-top: 6px; border-collapse: collapse; font-size: .9rem; }
+.dftable th, .dftable td { height: auto; padding: 4px 12px 4px 0; text-align: left; white-space: normal; border-bottom: 1px solid var(--line); }
+.dftable thead th { color: var(--faint); font-weight: 500; }
+.dftable tbody th { font-weight: 500; color: var(--text); white-space: nowrap; }
+.dftable td span { color: var(--dim); }
+.dftable td span.ok { color: var(--text); } .dftable td span.err { color: var(--red); } .dftable td span.miss { color: var(--faint); }
+.files { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-bottom: 18px; }
+.file { position: relative; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 12px;
+  padding: 12px 14px; background: var(--panel); border: 1px dashed var(--line2); border-radius: 8px; }
+.file.drag { border-color: var(--gold); background: #2b2219; }
+.file h2 { margin: 0; font: 600 1rem var(--ui); color: var(--text); }
+.file p { margin: 0; grid-column: 1; color: var(--dim); font-size: .92rem; overflow-wrap: anywhere; }
+.file p.ok { color: var(--text); }
+.file p.err { color: var(--red); }
+.file .actions { grid-column: 2; grid-row: 1 / span 2; display: flex; gap: 8px; }
+.file input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+
+/* Buttons */
+.btn { display: inline-flex; align-items: center; justify-content: center; min-height: 36px; padding: 0 14px; border-radius: 6px;
+  background: #2c241b; border: 1px solid var(--line2); cursor: pointer; white-space: nowrap; }
+.btn:hover:not(:disabled) { background: #362c21; border-color: var(--gold); }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn.primary { background: #4a3a1c; border-color: var(--gold); font-weight: 700; }
+.btn.quiet { background: transparent; border-color: transparent; color: var(--dim); }
+.btn.quiet:hover:not(:disabled) { color: var(--text); background: #2c241b; }
+:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+/* Monster picker */
+.picker { display: grid; grid-template-columns: auto minmax(260px, 420px) 1fr; align-items: center; gap: 12px 16px; margin-bottom: 18px; }
+.picker label { font-weight: 700; color: var(--gold); }
+.combo { position: relative; }
+.combo input { width: 100%; height: 40px; padding: 0 12px; background: var(--well); border: 1px solid var(--line2); border-radius: 6px; }
+.combo input::placeholder { color: var(--faint); }
+.combo ul { position: absolute; z-index: 20; left: 0; right: 0; top: calc(100% + 4px); max-height: min(420px, 60vh); overflow: auto;
+  margin: 0; padding: 4px; list-style: none; background: #1a1510; border: 1px solid var(--line2); border-radius: 6px;
+  box-shadow: 0 12px 28px rgba(0,0,0,.5); }
+.combo li { display: flex; justify-content: space-between; gap: 16px; padding: 6px 10px; border-radius: 4px; cursor: pointer; }
+.combo li .nm { color: var(--dim); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#monList { right: auto; width: max(100%, min(700px, calc(100vw - 40px))); }
+#monList li { display: grid; grid-template-columns: minmax(90px, 1fr) minmax(0, 1fr) 13rem; gap: 14px; }
+#monList li .lv { text-align: right; }
+#monList li.head, #monList li.more { display: block; }
+#monList li .nm { text-align: left; }
+.combo li .lv.lv-file { color: var(--faint); }
+.combo li .lv small { color: var(--faint); font-size: .8rem; margin-right: 6px; }
+.combo li[aria-selected=true] { background: #3a2e20; }
+.combo li mark { background: none; color: var(--gold); font-weight: 700; }
+.combo li.more { color: var(--faint); cursor: default; justify-content: center; }
+.combo li.head { display: block; padding: 10px 10px 4px; color: var(--faint); font-size: .85rem; cursor: default; }
+.combo li .lv { color: var(--dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.modelab { font-weight: 700; color: var(--gold); }
+.mode { display: inline-flex; justify-self: start; padding: 3px; gap: 3px; background: var(--well); border: 1px solid var(--line2); border-radius: 7px; }
+.mode label { position: relative; padding: 5px 12px; border-radius: 5px; color: var(--dim); cursor: pointer; white-space: nowrap; }
+.mode input { position: absolute; opacity: 0; pointer-events: none; }
+.mode label:has(input:checked) { background: #3a2e20; color: var(--gold); font-weight: 700; }
+.mode label:has(input:focus-visible) { outline: 2px solid var(--gold); outline-offset: 1px; }
+.picker.bymode #areaLabel, .picker.bymode #areaCombo { display: none; }
+.picker.bymode .areaopts { grid-column: 2 / span 2; }
+#monList li.ahead { display: flex !important; justify-content: space-between; gap: 14px; margin-top: 4px; padding: 8px 10px 4px;
+  border-top: 1px solid var(--line); color: var(--gold); font-size: .9rem; font-weight: 700; cursor: default; }
+#monList li.ahead:first-child { border-top: 0; }
+#monList li.dup { cursor: default; }
+#monList li.showall { display: block !important; text-align: center; color: var(--gold); font-weight: 700; }
+#monList li.acts { position: sticky; top: -4px; z-index: 2; display: flex !important; justify-content: flex-start; flex-wrap: wrap; gap: 6px; margin: -4px -4px 4px;
+  padding: 8px; background: #1a1510; border-bottom: 1px solid var(--line); cursor: default; }
+#monList li.acts span.lab { color: var(--faint); font-size: .85rem; align-self: center; margin-right: 4px; }
+#monList li.acts button { padding: 3px 10px; border-radius: 4px; border: 1px solid var(--line2); background: #2c241b;
+  color: var(--text); font-size: .88rem; cursor: pointer; }
+#monList li.acts button:hover { border-color: var(--gold); color: var(--gold); }
+#monList li .via { color: var(--faint); font-size: .82rem; margin-left: 6px; }
+#monList li.dup span, #monList li.dup mark { color: var(--faint) !important; }
+#monList li.minion > span:first-child { padding-left: 18px; position: relative; color: var(--dim); }
+#monList li.minion > span:first-child::before { content: ""; position: absolute; left: 4px; top: .15em; width: 8px; height: .6em;
+  border-left: 1px solid var(--faint); border-bottom: 1px solid var(--faint); }
+#monList li.ahead .lv { color: var(--dim); font-weight: 400; }
+.areaopts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; color: var(--dim); font-size: .95rem; }
+.info { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0; color: var(--dim); font-size: .95rem; }
+.info div { display: flex; gap: 6px; }
+.info dt { color: var(--faint); }
+.info dd { margin: 0; color: var(--text); }
+.info .warn { color: var(--orange); }
+
+/* Grid */
+.legend { display: flex; flex-wrap: wrap; gap: 6px 20px; margin: 0 0 10px; color: var(--dim); font-size: .92rem; }
+.legend span::before { content: ""; display: inline-block; width: 9px; height: 9px; margin-right: 7px; border-radius: 2px; background: currentColor; vertical-align: 1px; }
+.legend .g { color: var(--gold); } .legend .o { color: var(--orange); } .legend .r { color: var(--red); }
+.legend em { font-style: normal; color: var(--dim); }
+.namebar { position: sticky; left: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
+  padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.namebar label { font-weight: 700; color: var(--gold); }
+.namebar input { width: min(380px, 100%); height: 34px; padding: 0 10px; background: var(--well);
+  border: 1px solid var(--line2); border-radius: 5px; }
+.namebar input::placeholder { color: var(--faint); }
+.namebar input:focus { border-color: var(--gold); outline: none; box-shadow: 0 0 0 1px var(--gold); }
+.namebar input[readonly] { background: transparent; border-color: var(--line); color: var(--gold); font-weight: 700; cursor: default; }
+.namebar input[readonly]:focus { box-shadow: none; border-color: var(--line2); }
+.namebar .note { display: inline-flex; align-items: center; gap: 6px; color: var(--dim); font-size: .9rem; }
+.namebar .note svg { width: 13px; height: 13px; fill: currentColor; }
+.fileshead { margin: 4px 0 10px; font: 600 .95rem var(--ui); color: var(--dim); }
+.propbar { position: sticky; left: 0; padding: 10px 14px 12px; border-bottom: 1px solid var(--line); }
+.propbar .proplab { font-weight: 700; color: var(--gold); }
+table.proptable { min-width: 0; width: 100%; max-width: 1000px; border-collapse: collapse; margin-top: 6px; }
+table.proptable th, table.proptable td { height: auto; padding: 5px 10px 5px 0; white-space: normal; vertical-align: top; text-align: left; }
+table.proptable thead th { color: var(--dim); font-weight: 500; font-size: .88rem; border-bottom: 1px solid var(--line); }
+table.proptable tbody th { color: var(--faint); font-weight: 400; font-size: .85rem; width: 56px; }
+table.proptable td { width: 31%; }
+.prop { display: flex; justify-content: space-between; gap: 10px; }
+.prop .pd { color: var(--text); }
+.prop .pd.raw { color: var(--dim); font-family: Consolas, "Cascadia Mono", monospace; font-size: .88rem; }
+.prop .pc { color: var(--dim); font-size: .85rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.aibar { position: sticky; left: 0; padding: 10px 14px 12px; border-bottom: 1px solid var(--line); }
+.aibar .aihead, .propbar .aihead { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-bottom: 8px; }
+.aibar label { font-weight: 700; color: var(--gold); }
+.aibar select { width: min(260px, 100%); height: 32px; padding: 0 8px; background: var(--well); color: var(--text);
+  border: 1px solid var(--line2); border-radius: 5px; font: inherit; }
+.aibar select:focus { border-color: var(--gold); outline: none; box-shadow: 0 0 0 1px var(--gold); }
+.aibar select.v-gold { color: var(--gold); font-weight: 700; }
+.aibar .ainote { color: var(--dim); font-size: .9rem; }
+table.aitable { min-width: 0; width: auto; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+table.aitable th, table.aitable td { height: 28px; padding: 0 4px; }
+table.aitable thead th { font-weight: 500; font-size: .88rem; color: var(--dim); text-align: center; }
+table.aitable thead th span { border-bottom: 1px dotted var(--faint); cursor: help; }
+table.aitable thead th.unused { color: var(--faint); }
+table.aitable tbody th { text-align: left; font-weight: 500; color: var(--dim); padding-right: 10px; font-size: .92rem; }
+table.aitable input { width: 62px; height: 24px; padding: 0 6px; text-align: right; background: var(--well);
+  border: 1px solid var(--line); border-radius: 3px; font-variant-numeric: tabular-nums; }
+table.aitable input:focus { border-color: var(--gold); outline: none; box-shadow: 0 0 0 1px var(--gold); }
+table.aitable input.changed { color: var(--gold); font-weight: 700; border-color: var(--line2); }
+table.aitable input:disabled { opacity: .5; }
+.gridwrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--bg2); }
+table { border-collapse: collapse; width: 100%; min-width: 1040px; font-variant-numeric: tabular-nums; }
+th, td { padding: 0 8px; height: var(--row); white-space: nowrap; }
+thead th { font-weight: 500; }
+.dhead th { font: 700 1.05rem var(--display); color: var(--gold); letter-spacing: .04em; padding-top: 12px; padding-bottom: 6px; }
+.sub th { color: var(--faint); font-size: .85rem; text-align: right; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+.sub th.t { text-align: center; }
+.g0 { border-left: 1px solid var(--line); }
+th.lab { position: sticky; left: 0; z-index: 2; background: var(--bg2); text-align: left; font-weight: 500; min-width: 170px; }
+tbody tr:nth-child(even) th.lab, tbody tr:nth-child(even) td { background: rgba(255,255,255,.022); }
+tbody tr:nth-child(even) th.lab { background: #211a14; }
+tr.sec td, tr.sec th { border-top: 1px solid var(--line); }
+tr.lvl th, tr.lvl td { height: 38px; background: rgba(201,178,122,.05) !important; }
+tr.lvl th.lab { font-weight: 700; }
+.lab .el { color: var(--dim); font-weight: 400; }
+.lab.unused { color: var(--faint); }
+td.t { width: 92px; padding: 2px 6px; }
+td.t input { width: 100%; height: 24px; padding: 0 7px; text-align: right; background: var(--well); border: 1px solid var(--line); border-radius: 3px; font-variant-numeric: tabular-nums; }
+tr.lvl td.t input { height: 28px; }
+td.t input:focus { border-color: var(--gold); outline: none; box-shadow: 0 0 0 1px var(--gold); }
+td.t input.bad { border-color: var(--red); color: var(--red); }
+td.t input.linked { border-style: dashed; border-color: var(--line2); color: var(--gold); }
+td.t input:disabled { opacity: .5; }
+.num { text-align: right; min-width: 70px; }
+.num.r { min-width: 96px; }
+.v-text { color: var(--text); }
+.v-dim { color: var(--dim); }
+.v-faint { color: var(--faint); }
+.v-gold { color: var(--gold); font-weight: 700; }
+.v-orange { color: var(--orange); }
+.v-red { color: var(--red); }
+.num[data-note]::after { content: " " attr(data-note); font-size: .82em; }
+tr.eltype th.lab { display: flex; align-items: center; gap: 10px; }
+tr.eltype select { flex: 1; min-width: 0; height: 26px; padding: 0 6px; background: var(--well); color: var(--text);
+  border: 1px solid var(--line2); border-radius: 3px; font: inherit; font-size: .92rem; }
+tr.eltype select:focus { border-color: var(--gold); outline: none; box-shadow: 0 0 0 1px var(--gold); }
+td.elinfo { color: var(--faint); font-size: .88rem; }
+td.elinfo.warn { color: var(--orange); }
+tr.locked th.lab, tr.locked td { color: var(--faint); }
+.lvlmsg { font-size: .88rem; text-align: right; }
+
+/* Action bar */
+.bar { position: sticky; bottom: 0; z-index: 10; margin-top: 16px; padding: 12px 0 16px;
+  background: var(--bg); border-top: 1px solid var(--line); box-shadow: 0 -10px 18px rgba(22,18,14,.9); }
+.bar .row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.bar .spacer { flex: 1; }
+.check { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text); }
+.check input { width: 17px; height: 17px; accent-color: var(--gold); }
+.check.off { color: var(--faint); cursor: default; }
+#status { margin: 10px 0 0; min-height: 1.45em; color: var(--dim); }
+#status.ok { color: #9cc48a; } #status.warn { color: var(--orange); } #status.err { color: var(--red); }
+
+/* Notes */
+details { margin: 8px 0 40px; max-width: 78ch; color: var(--dim); }
+summary { cursor: pointer; color: var(--text); font-weight: 500; }
+details p { margin: .6em 0; }
+code { font-family: Consolas, "Cascadia Mono", monospace; font-size: .9em; color: var(--text); }
+
+dialog { max-width: 440px; padding: 20px; background: var(--panel); color: var(--text); border: 1px solid var(--line2); border-radius: 8px; }
+dialog::backdrop { background: rgba(8,6,4,.7); }
+dialog p { margin: 0 0 16px; }
+dialog .row { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+
+@media (max-width: 760px) {
+  .files { grid-template-columns: 1fr; }
+  .picker { grid-template-columns: 1fr; }
+  .bar .spacer { display: none; }
+  .bar { position: static; box-shadow: none; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Monster stat solver</h1>
+    <p class="lede">Enter the stats you want a monster to have in game. The page works back through the monlvl.txt L- columns (used by single player and TCP/IP games) to the numbers monstats.txt needs. Files are read in your browser and never uploaded.</p>
+  </header>
+
+  <section class="datafolder" id="dataPanel" aria-label="Data folder">
+    <div class="dfhead">
+      <div>
+        <h2>Data folder</h2>
+        <p id="dfStatus">Select your mod's <code>data</code> folder, or drop it here. The page reads the .txt files from <code>global/excel</code> and the .json files from <code>local/lng/strings</code>. Your browser may ask you to confirm; nothing is uploaded.</p>
+      </div>
+      <label class="btn primary" for="dfInput">Select data folder</label>
+      <input type="file" id="dfInput" webkitdirectory directory multiple>
+    </div>
+    <details class="dflist" id="dfList">
+      <summary>Files the page uses</summary>
+      <table class="dftable">
+        <thead><tr><th>File</th><th>Folder</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">monstats.txt</th><td><code>global/excel</code></td><td><span id="msStatus">Required. The monsters you edit.</span></td></tr>
+          <tr><th scope="row">monlvl.txt</th><td><code>global/excel</code></td><td><span id="lvlStatus">Built-in copy used until found.</span></td></tr>
+          <tr><th scope="row">levels.txt</th><td><code>global/excel</code></td><td><span id="arStatus">Optional. Areas and spawns.</span></td></tr>
+          <tr><th scope="row">elemtypes.txt</th><td><code>global/excel</code></td><td><span id="etStatus">Optional. Built-in list used until found.</span></td></tr>
+          <tr><th scope="row">monai.txt</th><td><code>global/excel</code></td><td><span id="aiStatus">Optional. AI names and parameter help.</span></td></tr>
+          <tr><th scope="row">monprop.txt</th><td><code>global/excel</code></td><td><span id="mpStatus">Optional. Monster properties.</span></td></tr>
+          <tr><th scope="row">properties.txt</th><td><code>global/excel</code></td><td><span id="prStatus">Optional. Property codes.</span></td></tr>
+          <tr><th scope="row">itemstatcost.txt</th><td><code>global/excel</code></td><td><span id="isStatus">Optional. Stat descriptions.</span></td></tr>
+          <tr><th scope="row">skills.txt</th><td><code>global/excel</code></td><td><span id="skStatus">Optional. Skill names.</span></td></tr>
+          <tr><th scope="row">levels.json</th><td><code>local/lng/strings</code></td><td><span id="lnStatus">Optional. English area names.</span></td></tr>
+          <tr><th scope="row">monsters.json</th><td><code>local/lng/strings</code></td><td><span id="mnStatus">Optional. English monster names.</span></td></tr>
+          <tr><th scope="row">item-modifiers.json</th><td><code>local/lng/strings</code></td><td><span id="imStatus">Optional. Property description text.</span></td></tr>
+        </tbody>
+      </table>
+    </details>
+  </section>
+
+  <section class="picker">
+    <span class="modelab" id="modeLabel">Pick by</span>
+    <div class="mode" role="radiogroup" aria-labelledby="modeLabel">
+      <label><input type="radio" name="pickMode" value="monster" checked> Monster, then area</label>
+      <label><input type="radio" name="pickMode" value="area"> Area's monsters</label>
+    </div>
+    <span></span>
+    <label for="mon" id="monLabel">Monster</label>
+    <div class="combo">
+      <input id="mon" type="text" role="combobox" aria-expanded="false" aria-controls="monList" aria-autocomplete="list"
+             autocomplete="off" spellcheck="false" placeholder="Load monstats.txt to search monsters" disabled>
+      <ul id="monList" role="listbox" aria-labelledby="monLabel" hidden></ul>
+    </div>
+    <dl class="info" id="info"></dl>
+    <label for="area" id="areaLabel">Area</label>
+    <div class="combo" id="areaCombo">
+      <input id="area" type="text" role="combobox" aria-expanded="false" aria-controls="areaList" aria-autocomplete="list"
+             autocomplete="off" spellcheck="false" placeholder="Load levels.txt to pick an area" disabled>
+      <ul id="areaList" role="listbox" aria-labelledby="areaLabel" hidden></ul>
+    </div>
+    <div class="areaopts">
+      <label class="check" id="patchWrap"><input type="checkbox" id="normalPatch"> Normal uses area level (patched game)</label>
+    </div>
+  </section>
+
+  <p class="legend" aria-label="Colour key">
+    <span class="g">Gold: this value will change in monstats.txt</span>
+    <span class="o">Orange: exact target isn't reachable at this level, nearest shown</span>
+    <span class="r">Red: needs attention</span>
+  </p>
+
+  <div class="gridwrap">
+    <div class="namebar">
+      <label for="monName">Monster name</label>
+      <input id="monName" type="text" maxlength="64" autocomplete="off" spellcheck="false" placeholder="Name this entry">
+      <span class="note" id="nameNote" hidden><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 7V5a4 4 0 0 1 8 0v2h1v8H3V7h1zm2 0h4V5a2 2 0 0 0-4 0v2z"/></svg>Locked to the monster loaded from monstats.txt</span>
+    </div>
+    <div class="aibar" id="aibar">
+      <div class="aihead">
+        <label for="aiSel">AI</label>
+        <select id="aiSel"></select>
+        <span class="ainote" id="aiNote"></span>
+      </div>
+      <table class="aitable" id="aiTable"><thead><tr><th></th></tr></thead><tbody></tbody></table>
+    </div>
+    <div class="propbar" id="propbar">
+      <div class="aihead"><span class="proplab">Properties</span><span class="ainote" id="propNote"></span></div>
+      <table class="proptable" id="propTable" hidden>
+        <thead><tr><th></th><th>Normal</th><th>Nightmare</th><th>Hell</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <table id="grid">
+      <thead>
+        <tr class="dhead"><th class="lab"></th></tr>
+        <tr class="sub"><th class="lab"></th></tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+
+  <div class="bar">
+    <div class="row">
+      <button class="btn" id="fill" type="button">Fill from current</button>
+      <button class="btn" id="clear" type="button">Clear targets</button>
+      <span class="spacer"></span>
+      <label class="check" id="linkWrap" title="Editing a target gives the other difficulties the same monstats.txt value; their targets show what that value produces at their levels.">
+        <input type="checkbox" id="linkDiffs"> Link difficulties</label>
+      <label class="check" id="wlWrap"><input type="checkbox" id="writeLevel"> Also write Level columns</label>
+      <button class="btn primary" id="apply" type="button">Apply to monstats</button>
+      <button class="btn" id="download" type="button">Download monstats.txt</button>
+      <button class="btn quiet" id="forget" type="button">Forget files</button>
+    </div>
+    <p id="status" role="status" aria-live="polite"></p>
+  </div>
+
+  <details>
+    <summary>How the numbers are worked out</summary>
+    <p>In game, each stat is the monstats.txt value times the monlvl.txt factor for the monster's level, divided by 100 with the remainder dropped. HP uses <code>L-HP</code>, Defense <code>L-AC</code>, Experience <code>L-XP</code>, attack rating <code>L-TH</code>, and all damage, elemental included, <code>L-DM</code>. Nightmare and Hell use the <code>(N)</code> and <code>(H)</code> columns.</p>
+    <p>For each target the page picks the smallest monstats value that produces it. At high levels a factor above 100 skips some values; those targets get the nearest reachable value and show in orange. Targets that already match the file keep the file's own number.</p>
+    <p>In the expansion, regular Nightmare and Hell monsters take the area's level from levels.txt (<code>MonLvlEx(N)</code>, <code>MonLvlEx(H)</code>), not <code>Level(N)</code> or <code>Level(H)</code>. In Normal they use monstats.txt <code>Level</code>, unless the game is patched to use the area level there too; tick "Normal uses area level" if yours is. Load levels.txt and pick an area to fill these in, or type the levels yourself. Monsters with <code>boss</code> set keep their own level everywhere.</p>
+    <p>Each El slot's type decides how its rows work. Duration (<code>ElDur</code>, in frames, 25 per second) only applies to cold, poison, stun, burning and freeze, plus random, which falls back to 25 frames when it's 0; for other types the row is locked and Apply clears the file's value. Poison follows the engine's special case, and burning is calculated the same way: the level-scaled damage times 10 is the poison rate in 1/256ths of a point per frame, and the duration is doubled. The poison target is the total the game shows, rate &times; frames &divide; 256, so a duration of 100 with 5 scaled damage deals 5 &times; 10 &times; 200 &divide; 256 = 39 over 8 seconds. Changing a poison or burning duration keeps its target total and adjusts the damage input.</p>
+    <p>These are base monster stats. Champion and unique level bonuses and HP multipliers, player count scaling, and poison or cold durations are applied on top by the game. Monsters with <code>noRatio</code> set take their stats from the skill that summons them, so they can't be edited here.</p>
+  </details>
+</div>
+
+<dialog id="dlg"><p id="dlgMsg"></p><div class="row" id="dlgBtns"></div></dialog>
+
+<script>
+"use strict";
+// CORE-BEGIN
+const DIFF_SUFFIX = ["", "(N)", "(H)"];
+const DIFF_NAME = ["Normal", "Nightmare", "Hell"];
+const KIND_COL = { AC: "AC", TH: "TH", HP: "HP", DM: "DM", XP: "XP" };
+// monlvl.txt L- columns: used by single player and TCP/IP (and ladder) games
+const STATS = [
+  ["MinHP", "Min HP", "minHP", "MinHP", "HP", 0, "MaxHP", false],
+  ["MaxHP", "Max HP", "maxHP", "MaxHP", "HP", 0, "", false],
+  ["AC", "Defense", "AC", "AC", "AC", 0, "", false],
+  ["Exp", "Experience", "Exp", "Exp", "XP", 0, "", true],
+  ["A1MinD", "A1 min damage", "A1MinD", "A1MinD", "DM", 0, "A1MaxD", false],
+  ["A1MaxD", "A1 max damage", "A1MaxD", "A1MaxD", "DM", 0, "", false],
+  ["A1TH", "A1 attack rating", "A1TH", "A1TH", "TH", 0, "", true],
+  ["A2MinD", "A2 min damage", "A2MinD", "A2MinD", "DM", 0, "A2MaxD", false],
+  ["A2MaxD", "A2 max damage", "A2MaxD", "A2MaxD", "DM", 0, "", false],
+  ["A2TH", "A2 attack rating", "A2TH", "A2TH", "TH", 0, "", true],
+  ["S1MinD", "S1 min damage", "S1MinD", "S1MinD", "DM", 0, "S1MaxD", false],
+  ["S1MaxD", "S1 max damage", "S1MaxD", "S1MaxD", "DM", 0, "", false],
+  ["S1TH", "S1 attack rating", "S1TH", "S1TH", "TH", 0, "", true],
+  ["El1MinD", "El1 min damage", "El1MinD", "El1MinD", "DM", 1, "El1MaxD", false],
+  ["El1MaxD", "El1 max damage", "El1MaxD", "El1MaxD", "DM", 1, "", false],
+  ["El1Dur", "El1 duration", "El1Dur", "El1Dur", "DUR", 1, "", false],
+  ["El2MinD", "El2 min damage", "El2MinD", "El2MinD", "DM", 2, "El2MaxD", false],
+  ["El2MaxD", "El2 max damage", "El2MaxD", "El2MaxD", "DM", 2, "", false],
+  ["El2Dur", "El2 duration", "El2Dur", "El2Dur", "DUR", 2, "", false],
+  ["El3MinD", "El3 min damage", "El3MinD", "El3MinD", "DM", 3, "El3MaxD", false],
+  ["El3MaxD", "El3 max damage", "El3MaxD", "El3MaxD", "DM", 3, "", false],
+  ["El3Dur", "El3 duration", "El3Dur", "El3Dur", "DUR", 3, "", false],
+].map(([key, label, base, baseNm, kind, elem, pair, sectionEnd]) => ({ key, label, base, baseNm, kind, elem, pair, sectionEnd }));
+STATS.forEach(s => { s.pairMax = s.pair ? STATS.findIndex(x => x.key === s.pair) : -1; });
+
+// Element types (elemtypes.txt codes). Duration only matters for these (D2R monstats.txt guide)
+const ELEM_TYPES_DEFAULT = [["fire", "Fire"], ["ltng", "Lightning"], ["mag", "Magic"], ["cold", "Cold"], ["pois", "Poison"],
+  ["life", "Life drain"], ["mana", "Mana drain"], ["stam", "Stamina drain"], ["stun", "Stun"], ["rand", "Random"],
+  ["burn", "Burning"], ["frze", "Freeze"]].map(([code, name]) => ({ code, name }));
+const DUR_TYPES = new Set(["cold", "pois", "burn", "stun", "frze", "rand"]);
+
+function loadElemTypes(text) {
+  const t = parseTsv(text);
+  const cc = t.col.get("code");
+  if (cc === undefined) throw new Error("no Code column");
+  const nc = t.col.get("elemental type") ?? t.col.get("name") ?? (cc === 0 ? 1 : 0);
+  const list = [];
+  for (let r = 1; r < t.lines.length; r++) {
+    const code = (t.lines[r].cells[cc] ?? "").trim();
+    if (!code || code.toLowerCase() === "expansion" || list.some(x => x.code === code)) continue;
+    list.push({ code, name: (t.lines[r].cells[nc] ?? "").trim() || code });
+  }
+  if (!list.length) throw new Error("no element codes");
+  return list;
+}
+
+// Poison (D2R rule): damage x10 is the bit rate per frame, ElDur x2 is the length in frames,
+// total shown in game = rate * frames / 256 (1 point = 256 bits, 25 frames = 1 second)
+const poisonTotal = (v, durRaw) => tdiv(v * 10 * durRaw * 2, 256);
+
+// Smallest input whose in-game value reaches target (f non-decreasing); nearest if skipped, ties up
+function solveBy(target, f) {
+  if (target <= 0) return { input: 0, achieved: 0 };
+  let hi = 1;
+  while (f(hi) < target && hi < 2 ** 31) hi *= 2;
+  let lo = 0;
+  while (hi - lo > 1) { const mid = Math.floor((lo + hi) / 2); if (f(mid) >= target) hi = mid; else lo = mid; }
+  const a = f(hi), b = f(lo);
+  return target - b < a - target ? { input: lo, achieved: b } : { input: hi, achieved: a };
+}
+
+const statCol = (s, d) => d === 0 ? s.base : s.baseNm + DIFF_SUFFIX[d];
+
+function parseTsv(text) {
+  const lines = [];
+  let pos = 0;
+  while (pos < text.length) {
+    const nl = text.indexOf("\n", pos);
+    const hasNl = nl !== -1;
+    let s = text.slice(pos, hasNl ? nl : text.length);
+    let cr = false;
+    if (s.endsWith("\r")) { s = s.slice(0, -1); cr = true; }
+    lines.push({ cells: s.split("\t"), cr, nl: hasNl });
+    pos = hasNl ? nl + 1 : text.length;
+  }
+  const col = new Map();
+  if (lines.length) lines[0].cells.forEach((h, i) => { const k = h.trim().toLowerCase(); if (k && !col.has(k)) col.set(k, i); });
+  return { lines, col };
+}
+const serializeTsv = t => t.lines.map(l => l.cells.join("\t") + (l.cr ? "\r" : "") + (l.nl ? "\n" : "")).join("");
+function toInt(s) {
+  s = (s ?? "").trim();
+  return /^[+-]?\d+$/.test(s) ? Number(s) : null;
+}
+const tdiv = (a, b) => (a - (a % b)) / b;           // exact integer division, truncating like C
+const forward = (raw, m) => tdiv(raw * m, 100);
+function solve(target, m) {
+  if (target <= 0 || m <= 0) return { input: 0, achieved: 0 };
+  const x = tdiv(target * 100 + m - 1, m);
+  const hi = forward(x, m);
+  if (hi === target || x === 0) return { input: x, achieved: hi };
+  const lo = forward(x - 1, m);
+  return target - lo < hi - target ? { input: x - 1, achieved: lo } : { input: x, achieved: hi };
+}
+
+function loadMonLvl(text) {
+  const t = parseTsv(text);
+  const li = t.col.get("level");
+  if (li === undefined) throw new Error("no Level column");
+  const idx = {};
+  for (const k of Object.keys(KIND_COL)) {
+    idx[k] = DIFF_SUFFIX.map(sfx => {
+      const c = t.col.get(("L-" + KIND_COL[k] + sfx).toLowerCase());
+      if (c === undefined) throw new Error("missing column L-" + KIND_COL[k] + sfx);
+      return c;
+    });
+  }
+  const rows = new Map();
+  for (let r = 1; r < t.lines.length; r++) {
+    const L = toInt(t.lines[r].cells[li]);
+    if (L === null) continue;
+    const v = {};
+    for (const k of Object.keys(KIND_COL)) v[k] = idx[k].map(c => toInt(t.lines[r].cells[c]) ?? 0);
+    rows.set(L, v);
+  }
+  if (!rows.size) throw new Error("no data rows");
+  const keys = [...rows.keys()];
+  return { rows, min: Math.min(...keys), max: Math.max(...keys) };
+}
+
+function loadMonStats(text) {
+  const t = parseTsv(text);
+  if (t.col.get("id") === undefined) throw new Error("no Id column");
+  if (t.col.get("level") === undefined) throw new Error("no Level column");
+  const ms = { t, byId: new Map(), order: [] };
+  for (let r = 1; r < t.lines.length; r++) {
+    const k = msGet(ms, r, "Id").trim().toLowerCase();
+    if (!k || k === "expansion") continue;
+    if (!ms.byId.has(k)) { ms.byId.set(k, r); ms.order.push(r); }
+  }
+  if (!ms.order.length) throw new Error("no monster rows");
+  return ms;
+}
+function msGet(ms, r, col) {
+  const c = ms.t.col.get(col.toLowerCase());
+  return c === undefined ? "" : (ms.t.lines[r].cells[c] ?? "");
+}
+function msSet(ms, r, col, v) {
+  const c = ms.t.col.get(col.toLowerCase());
+  if (c === undefined) return false;
+  const cells = ms.t.lines[r].cells;
+  while (cells.length <= c) cells.push("");
+  cells[c] = String(v);
+  return true;
+}
+const msRaw = (ms, r, s, d) => toInt(msGet(ms, r, statCol(s, d)));
+const msLevel = (ms, r, d) => toInt(msGet(ms, r, "Level" + DIFF_SUFFIX[d]));
+const msNoRatio = (ms, r) => (toInt(msGet(ms, r, "noRatio")) ?? 0) !== 0;
+const msElType = (ms, r, slot) => msGet(ms, r, "El" + slot + "Type").trim();
+function loadLevels(text) {
+  const t = parseTsv(text);
+  const find = (...names) => { for (const n of names) { const c = t.col.get(n.toLowerCase()); if (c !== undefined) return c; } return undefined; };
+  const ci = find("Id"), cName = find("Name"), cLN = find("LevelName");
+  const cLv = [find("MonLvlEx", "MonLvl1Ex"), find("MonLvlEx(N)", "MonLvl2Ex"), find("MonLvlEx(H)", "MonLvl3Ex")];
+  const cAct = find("Act");
+  if (ci === undefined) throw new Error("no Id column");
+  if (cLv.some(c => c === undefined)) throw new Error("no MonLvlEx, MonLvlEx(N), MonLvlEx(H) columns");
+  // mon# = Normal, umon# = Normal uniques, nmon# = Nightmare and Hell (D2R levels.txt guide)
+  const colsN = [], colsNH = [], colsMon = [];
+  t.lines[0].cells.forEach((h, i) => {
+    const k = h.trim();
+    if (/^mon\d+$/i.test(k)) colsMon.push([+k.slice(3), i]);
+    if (/^u?mon\d+$/i.test(k)) colsN.push(i);
+    else if (/^nmon\d+$/i.test(k)) colsNH.push(i);
+  });
+  const areas = [];
+  for (let r = 1; r < t.lines.length; r++) {
+    const c = t.lines[r].cells;
+    const id = toInt(c[ci]);
+    if (id === null) continue;
+    const lv = cLv.map(k => toInt(c[k]) ?? 0);
+    if (lv.every(v => v <= 0)) continue;  // towns and other areas without monsters
+    const code = cName !== undefined ? (c[cName] ?? "").trim() : "";
+    const key = cLN !== undefined ? (c[cLN] ?? "").trim() : "";
+    const name = key || code || "Area " + id;
+    const ids = cols => new Set(cols.map(k => (c[k] ?? "").trim().toLowerCase()).filter(Boolean));
+    const spawnsN = ids(colsN), spawnsNH = ids(colsNH);
+    // mon1..mon25 in column order, for the by-area monster list
+    const monList = colsMon.slice().sort((x, y) => x[0] - y[0]).map(([, k]) => (c[k] ?? "").trim()).filter(Boolean);
+    const spawns = new Set([...spawnsN, ...spawnsNH]);
+    const act = cAct !== undefined ? toInt(c[cAct]) : null;
+    areas.push({ id, key, name, code, act, lv, spawns, spawnsN, spawnsNH, monList, low: `${name} ${code} ${id}`.toLowerCase() });
+  }
+  if (!areas.length) throw new Error("no areas with monster levels");
+  return areas;
+}
+// D2R string tables (data/local/lng/strings/*.json): [{ "id", "Key", "enUS", ... }] -> Map Key -> enUS
+function loadLevelStrings(text) {
+  let data;
+  try { data = JSON.parse(text.replace(/^\uFEFF/, "")); } catch { throw new Error("isn't valid JSON"); }
+  if (!Array.isArray(data)) throw new Error("expected a list of string entries");
+  const map = new Map();
+  for (const e of data) {
+    if (!e || typeof e !== "object") continue;
+    const k = e.Key ?? e.key, v = e.enUS;
+    // drop colour codes (\u00FFc + one char) that some strings carry
+    if (typeof k === "string" && typeof v === "string" && !map.has(k)) map.set(k, v.replace(/\u00FFc./g, "").trim());
+  }
+  if (!map.size) throw new Error("no Key / enUS entries");
+  return map;
+}
+// monai.txt: AI names, with the *aip1..*aip8 comment columns describing each parameter
+const AI_COLS = ["aidel", "aidist", "aip1", "aip2", "aip3", "aip4", "aip5", "aip6", "aip7", "aip8"];
+function loadMonAI(text) {
+  const t = parseTsv(text);
+  const ci = t.col.get("ai");
+  if (ci === undefined) throw new Error("no AI column");
+  const pcol = {};
+  for (let n = 1; n <= 8; n++) pcol["aip" + n] = t.col.get("*aip" + n) ?? t.col.get("aip" + n);
+  // other comment columns (except *eol) become a general note for the AI
+  const noteCols = t.lines[0].cells.map((h, i) => [h.trim(), i])
+    .filter(([h, i]) => h.startsWith("*") && !/^\*aip\d+$/i.test(h) && h.toLowerCase() !== "*eol" && i !== ci);
+  const list = [];
+  for (let r = 1; r < t.lines.length; r++) {
+    const c = t.lines[r].cells;
+    const name = (c[ci] ?? "").trim();
+    if (!name || name.toLowerCase() === "expansion" || list.some(x => x.name === name)) continue;
+    const desc = {};
+    for (const [k, i] of Object.entries(pcol)) desc[k] = i === undefined ? "" : (c[i] ?? "").trim();
+    const note = noteCols.map(([h, i]) => (c[i] ?? "").trim() ? `${h.slice(1)}: ${(c[i] ?? "").trim()}` : "").filter(Boolean).join(". ");
+    list.push({ name, desc, note });
+  }
+  if (!list.length) throw new Error("no AI rows");
+  return list;
+}
+// ---- Monster properties: MonProp.txt, properties.txt, itemstatcost.txt, skills.txt ----
+// Column lookup that ignores spaces and case ("prop1 (N)" == "prop1(n)")
+function colFinder(t) {
+  const m = new Map();
+  t.lines[0].cells.forEach((h, i) => { const k = h.replace(/\s+/g, "").toLowerCase(); if (k && !m.has(k)) m.set(k, i); });
+  return name => m.get(name.replace(/\s+/g, "").toLowerCase());
+}
+function loadMonProp(text) {
+  const t = parseTsv(text), col = colFinder(t);
+  const ci = col("Id");
+  if (ci === undefined) throw new Error("no Id column");
+  if (col("prop1") === undefined) throw new Error("no prop1 column");
+  const map = new Map();
+  for (let r = 1; r < t.lines.length; r++) {
+    const c = t.lines[r].cells, id = (c[ci] ?? "").trim();
+    if (!id || id.toLowerCase() === "expansion" || map.has(id.toLowerCase())) continue;
+    const diffs = [0, 1, 2].map(d => {
+      const out = [];
+      for (let n = 1; n <= 6; n++) {
+        const get = f => { const k = col(f + n + DIFF_SUFFIX[d]); return k === undefined ? "" : (c[k] ?? "").trim(); };
+        const prop = get("prop");
+        if (prop) out.push({ slot: n, prop, chance: get("chance"), par: get("par"), min: get("min"), max: get("max") });
+      }
+      return out;
+    });
+    map.set(id.toLowerCase(), { id, diffs });
+  }
+  if (!map.size) throw new Error("no rows");
+  return map;
+}
+function loadProperties(text) {
+  const t = parseTsv(text), col = colFinder(t);
+  const cc = col("code");
+  if (cc === undefined) throw new Error("no code column");
+  const map = new Map();
+  for (let r = 1; r < t.lines.length; r++) {
+    const c = t.lines[r].cells, code = (c[cc] ?? "").trim();
+    if (!code || code.toLowerCase() === "expansion") continue;
+    const entries = [];
+    for (let n = 1; n <= 7; n++) {
+      const g = f => { const k = col(f + n); return k === undefined ? "" : (c[k] ?? "").trim(); };
+      const func = toInt(g("func"));
+      if (func === null && !g("stat")) continue;
+      entries.push({ func: func ?? 0, stat: g("stat"), set: g("set"), val: g("val") });
+    }
+    if (!map.has(code.toLowerCase())) map.set(code.toLowerCase(), { code, entries });
+  }
+  if (!map.size) throw new Error("no properties");
+  return map;
+}
+function loadISC(text) {
+  const t = parseTsv(text), col = colFinder(t);
+  const cs = col("Stat");
+  if (cs === undefined) throw new Error("no Stat column");
+  if (col("descfunc") === undefined) throw new Error("no descfunc column");
+  const F = ["descfunc", "descval", "descstrpos", "descstrneg", "descstr2", "dgrp", "dgrpfunc", "dgrpval", "dgrpstrpos", "dgrpstrneg", "dgrpstr2"];
+  const map = new Map(), dgrpCount = new Map();
+  for (let r = 1; r < t.lines.length; r++) {
+    const c = t.lines[r].cells, stat = (c[cs] ?? "").trim();
+    if (!stat || stat.toLowerCase() === "expansion") continue;
+    const e = { stat };
+    for (const f of F) { const k = col(f); e[f] = k === undefined ? "" : (c[k] ?? "").trim(); }
+    for (const f of ["descfunc", "descval", "dgrp", "dgrpfunc", "dgrpval"]) e[f] = toInt(e[f]) ?? 0;
+    if (e.dgrp) dgrpCount.set(e.dgrp, (dgrpCount.get(e.dgrp) || 0) + 1);
+    if (!map.has(stat.toLowerCase())) map.set(stat.toLowerCase(), e);
+  }
+  if (!map.size) throw new Error("no stats");
+  return { map, dgrpCount };
+}
+// skills.txt: Id (or *Id, or row order), skill name, charclass
+function loadSkills(text) {
+  const t = parseTsv(text), col = colFinder(t);
+  const cn = col("skill");
+  if (cn === undefined) throw new Error("no skill column");
+  const ci = col("Id") ?? col("*Id"), cc = col("charclass");
+  const list = [];
+  let order = 0;
+  for (let r = 1; r < t.lines.length; r++) {
+    const c = t.lines[r].cells, name = (c[cn] ?? "").trim();
+    if (!name || name.toLowerCase() === "expansion") continue;
+    const id = ci !== undefined ? toInt(c[ci]) ?? order : order;
+    order++;
+    list.push([id, name, cc !== undefined ? (c[cc] ?? "").trim() : ""]);
+  }
+  if (!list.length) throw new Error("no skills");
+  return list;
+}
+// CORE-END
+
+const BUNDLED_MONLVL = "Level\tAC\tAC(N)\tAC(H)\tL-AC\tL-AC(N)\tL-AC(H)\tTH\tTH(N)\tTH(H)\tL-TH\tL-TH(N)\tL-TH(H)\tHP\tHP(N)\tHP(H)\tL-HP\tL-HP(N)\tL-HP(H)\tDM\tDM(N)\tDM(H)\tL-DM\tL-DM(N)\tL-DM(H)\tXP\tXP(N)\tXP(H)\tL-XP\tL-XP(N)\tL-XP(H)\r\n0\t1\t1\t1\t1\t1\t1\t1\t1\t1\t1\t1\t1\t1\t1\t1\t1\t1\t1\t1\t1\t1\t1\t1\t1\t1\t1\t1\t1\t1\t1\r\n1\t6\t92\t147\t6\t108\t173\t8\t108\t216\t8\t108\t216\t7\t107\t830\t7\t107\t1107\t2\t3\t4\t2\t3\t4\t30\t78\t117\t30\t78\t117\r\n2\t12\t102\t162\t12\t120\t190\t12\t126\t254\t12\t126\t254\t9\t113\t852\t9\t113\t1136\t3\t4\t6\t3\t4\t6\t40\t104\t156\t40\t104\t156\r\n3\t18\t112\t177\t18\t132\t208\t18\t144\t292\t18\t144\t292\t12\t120\t875\t12\t120\t1167\t3\t4\t6\t3\t4\t6\t50\t131\t197\t50\t131\t197\r\n4\t24\t122\t192\t24\t144\t226\t26\t162\t330\t26\t162\t330\t15\t125\t897\t15\t125\t1196\t4\t5\t7\t4\t5\t7\t60\t156\t234\t60\t156\t234\r\n5\t30\t133\t207\t30\t156\t243\t35\t180\t368\t35\t180\t368\t17\t132\t920\t17\t132\t1227\t4\t5\t7\t4\t5\t7\t70\t182\t273\t70\t182\t273\r\n6\t36\t143\t222\t36\t168\t261\t45\t198\t406\t45\t198\t406\t20\t139\t942\t20\t139\t1256\t5\t7\t9\t5\t7\t9\t80\t207\t311\t80\t207\t311\r\n7\t42\t153\t236\t42\t180\t278\t56\t216\t444\t56\t216\t444\t23\t145\t965\t23\t145\t1287\t5\t7\t9\t5\t7\t9\t90\t234\t351\t90\t234\t351\r\n8\t48\t163\t252\t48\t192\t296\t67\t234\t482\t67\t234\t482\t27\t152\t987\t27\t152\t1316\t6\t8\t11\t6\t8\t11\t100\t260\t390\t100\t260\t390\r\n9\t54\t173\t267\t54\t204\t314\t78\t252\t520\t78\t252\t520\t31\t157\t1010\t31\t157\t1347\t7\t9\t13\t7\t9\t13\t110\t285\t428\t110\t285\t428\r\n10\t60\t184\t281\t60\t216\t331\t89\t270\t558\t89\t270\t558\t35\t164\t1032\t35\t164\t1376\t7\t9\t13\t7\t9\t13\t120\t312\t468\t120\t312\t468\r\n11\t66\t194\t297\t66\t228\t349\t100\t288\t596\t100\t288\t596\t36\t171\t1055\t36\t171\t1407\t8\t11\t15\t8\t11\t15\t130\t338\t507\t130\t338\t507\r\n12\t72\t204\t311\t72\t240\t366\t111\t306\t634\t111\t306\t634\t40\t177\t1077\t40\t177\t1436\t8\t11\t15\t8\t11\t15\t140\t363\t545\t140\t363\t545\r\n13\t78\t214\t326\t78\t252\t384\t122\t324\t672\t122\t324\t672\t44\t184\t1100\t44\t184\t1467\t9\t12\t17\t9\t12\t17\t154\t401\t602\t154\t401\t602\r\n14\t84\t224\t342\t84\t264\t402\t133\t342\t710\t133\t342\t710\t48\t189\t1122\t48\t189\t1496\t10\t13\t19\t10\t13\t19\t169\t440\t660\t169\t440\t660\r\n15\t90\t235\t356\t90\t276\t419\t144\t360\t748\t144\t360\t748\t52\t196\t1145\t52\t196\t1527\t10\t13\t19\t10\t13\t19\t186\t482\t723\t186\t482\t723\r\n16\t96\t245\t371\t96\t288\t437\t155\t378\t786\t155\t378\t786\t56\t203\t1167\t56\t203\t1556\t11\t15\t20\t11\t15\t20\t205\t533\t800\t205\t533\t800\r\n17\t102\t255\t386\t102\t300\t454\t166\t396\t824\t166\t396\t824\t60\t209\t1190\t60\t209\t1587\t11\t15\t20\t11\t15\t20\t225\t584\t876\t225\t584\t876\r\n18\t108\t265\t401\t108\t312\t472\t177\t414\t862\t177\t414\t862\t64\t216\t1212\t64\t216\t1616\t12\t16\t22\t12\t16\t22\t248\t644\t966\t248\t644\t966\r\n19\t114\t275\t417\t114\t324\t490\t188\t432\t900\t188\t432\t900\t68\t221\t1235\t68\t221\t1647\t13\t17\t24\t13\t17\t24\t273\t708\t1062\t273\t708\t1062\r\n20\t120\t286\t431\t120\t336\t507\t199\t450\t938\t199\t450\t938\t73\t228\t1257\t73\t228\t1676\t13\t17\t24\t13\t17\t24\t300\t779\t1169\t300\t779\t1169\r\n21\t126\t296\t446\t126\t348\t525\t210\t468\t976\t210\t468\t976\t78\t236\t1280\t78\t236\t1707\t14\t19\t26\t14\t19\t26\t330\t857\t1286\t330\t857\t1286\r\n22\t132\t306\t461\t132\t360\t542\t221\t486\t1014\t221\t486\t1014\t84\t243\t1302\t84\t243\t1736\t14\t19\t26\t14\t19\t26\t363\t942\t1413\t363\t942\t1413\r\n23\t138\t316\t476\t138\t372\t560\t232\t504\t1052\t232\t504\t1052\t89\t248\t1325\t89\t248\t1767\t15\t20\t28\t15\t20\t28\t399\t1035\t1553\t399\t1035\t1553\r\n24\t144\t326\t491\t144\t384\t578\t243\t522\t1090\t243\t522\t1090\t94\t255\t1347\t94\t255\t1796\t16\t21\t30\t16\t21\t30\t439\t1139\t1709\t439\t1139\t1709\r\n25\t150\t337\t506\t150\t396\t595\t254\t540\t1128\t254\t540\t1128\t100\t261\t1370\t100\t261\t1827\t16\t21\t30\t16\t21\t30\t470\t1220\t1830\t470\t1220\t1830\r\n26\t156\t347\t521\t156\t408\t613\t265\t558\t1166\t265\t558\t1166\t106\t268\t1392\t106\t268\t1856\t17\t23\t31\t17\t23\t31\t503\t1305\t1958\t503\t1305\t1958\r\n27\t162\t357\t536\t162\t420\t630\t276\t576\t1204\t276\t576\t1204\t113\t275\t1415\t113\t275\t1887\t17\t23\t31\t17\t23\t31\t538\t1397\t2096\t538\t1397\t2096\r\n28\t168\t367\t551\t168\t432\t648\t287\t594\t1242\t287\t594\t1242\t120\t280\t1437\t120\t280\t1916\t18\t24\t33\t18\t24\t33\t576\t1494\t2241\t576\t1494\t2241\r\n29\t174\t377\t566\t174\t444\t666\t298\t612\t1280\t298\t612\t1280\t126\t287\t1460\t126\t287\t1947\t19\t25\t35\t19\t25\t35\t616\t1598\t2397\t616\t1598\t2397\r\n30\t180\t388\t581\t180\t456\t683\t309\t630\t1318\t309\t630\t1318\t134\t320\t1482\t134\t320\t1976\t19\t25\t35\t19\t25\t35\t659\t1709\t2564\t659\t1709\t2564\r\n31\t186\t398\t596\t186\t468\t701\t320\t648\t1356\t320\t648\t1356\t142\t355\t1505\t142\t355\t2007\t20\t27\t37\t20\t27\t37\t706\t1832\t2748\t706\t1832\t2748\r\n32\t192\t408\t610\t192\t480\t718\t331\t666\t1394\t331\t666\t1394\t150\t388\t1527\t150\t388\t2036\t20\t27\t37\t20\t27\t37\t755\t1958\t2937\t755\t1958\t2937\r\n33\t198\t418\t626\t198\t492\t736\t342\t684\t1432\t342\t684\t1432\t158\t423\t1550\t158\t423\t2067\t21\t28\t39\t21\t28\t39\t808\t2097\t3146\t808\t2097\t3146\r\n34\t204\t428\t641\t204\t504\t754\t353\t702\t1470\t353\t702\t1470\t166\t456\t1572\t166\t456\t2096\t22\t29\t41\t22\t29\t41\t864\t2241\t3362\t864\t2241\t3362\r\n35\t210\t439\t655\t210\t516\t771\t364\t720\t1508\t364\t720\t1508\t174\t491\t1595\t174\t491\t2127\t22\t29\t41\t22\t29\t41\t925\t2399\t3599\t925\t2399\t3599\r\n36\t216\t449\t671\t216\t528\t789\t375\t738\t1546\t375\t738\t1546\t182\t525\t1617\t182\t525\t2156\t23\t31\t43\t23\t31\t43\t990\t2568\t3852\t990\t2568\t3852\r\n37\t222\t459\t685\t222\t540\t806\t386\t756\t1584\t386\t756\t1584\t190\t559\t1640\t190\t559\t2187\t23\t31\t43\t23\t31\t43\t1059\t2745\t4118\t1059\t2745\t4118\r\n38\t228\t469\t700\t228\t552\t824\t397\t774\t1622\t397\t774\t1622\t198\t593\t1662\t198\t593\t2216\t24\t32\t44\t24\t32\t44\t1133\t2939\t4409\t1133\t2939\t4409\r\n39\t234\t479\t716\t234\t564\t842\t408\t792\t1660\t408\t792\t1660\t206\t627\t1685\t206\t627\t2247\t25\t33\t46\t25\t33\t46\t1212\t3144\t4716\t1212\t3144\t4716\r\n40\t240\t490\t730\t240\t576\t859\t419\t810\t1698\t419\t810\t1698\t215\t661\t1707\t215\t661\t2276\t25\t33\t46\t25\t33\t46\t1297\t3365\t5048\t1297\t3365\t5048\r\n41\t246\t500\t745\t246\t588\t877\t430\t828\t1736\t430\t828\t1736\t225\t696\t1730\t225\t696\t2307\t26\t35\t48\t26\t35\t48\t1388\t3600\t5400\t1388\t3600\t5400\r\n42\t252\t510\t760\t252\t600\t894\t441\t846\t1774\t441\t846\t1774\t234\t729\t1752\t234\t729\t2336\t26\t35\t48\t26\t35\t48\t1485\t3852\t5778\t1485\t3852\t5778\r\n43\t258\t520\t775\t258\t612\t912\t452\t864\t1812\t452\t864\t1812\t243\t764\t1775\t243\t764\t2367\t27\t36\t50\t27\t36\t50\t1589\t4121\t6182\t1589\t4121\t6182\r\n44\t264\t530\t791\t264\t624\t930\t463\t882\t1850\t463\t882\t1850\t253\t797\t1797\t253\t797\t2396\t28\t37\t52\t28\t37\t52\t1693\t4409\t6614\t1693\t4409\t6614\r\n45\t270\t541\t805\t270\t636\t947\t474\t900\t1888\t474\t900\t1888\t262\t832\t1820\t262\t832\t2427\t28\t37\t52\t28\t37\t52\t1797\t4718\t7077\t1797\t4718\t7077\r\n46\t276\t551\t820\t276\t648\t965\t485\t918\t1926\t485\t918\t1926\t271\t867\t1842\t271\t867\t2456\t29\t39\t54\t29\t39\t54\t1901\t5051\t7577\t1901\t5051\t7577\r\n47\t282\t561\t835\t282\t660\t982\t496\t936\t1964\t496\t936\t1964\t281\t900\t1865\t281\t900\t2487\t29\t39\t54\t29\t39\t54\t2005\t5402\t8103\t2005\t5402\t8103\r\n48\t288\t571\t850\t288\t672\t1000\t507\t954\t2002\t507\t954\t2002\t290\t935\t1887\t290\t935\t2516\t30\t40\t56\t30\t40\t56\t2109\t5783\t8675\t2109\t5783\t8675\r\n49\t294\t581\t865\t294\t684\t1018\t518\t972\t2040\t518\t972\t2040\t299\t968\t1910\t299\t968\t2547\t31\t41\t57\t31\t41\t57\t2213\t6186\t9279\t2213\t6186\t9279\r\n50\t300\t592\t880\t300\t696\t1035\t529\t990\t2078\t529\t990\t2078\t310\t1003\t1932\t310\t1003\t2576\t31\t41\t57\t31\t41\t57\t2317\t6618\t9927\t2317\t6618\t9927\r\n51\t306\t602\t895\t306\t708\t1053\t540\t1008\t2116\t540\t1008\t2116\t321\t1037\t1955\t321\t1037\t2607\t32\t43\t59\t32\t43\t59\t2421\t7080\t10620\t2421\t7080\t10620\r\n52\t312\t612\t910\t312\t720\t1070\t551\t1026\t2154\t551\t1026\t2154\t331\t1071\t1977\t331\t1071\t2636\t32\t43\t59\t32\t43\t59\t2525\t7506\t11259\t2525\t7506\t11259\r\n53\t318\t622\t925\t318\t732\t1088\t562\t1044\t2192\t562\t1044\t2192\t342\t1105\t2000\t342\t1105\t2667\t33\t44\t61\t33\t44\t61\t2629\t7956\t11934\t2629\t7956\t11934\r\n54\t324\t632\t940\t324\t744\t1106\t573\t1062\t2230\t573\t1062\t2230\t352\t1139\t2030\t352\t1139\t2707\t34\t45\t63\t34\t45\t63\t2733\t8435\t12653\t2733\t8435\t12653\r\n55\t330\t643\t955\t330\t756\t1123\t584\t1080\t2268\t584\t1080\t2268\t363\t1173\t2075\t363\t1173\t2767\t34\t45\t63\t34\t45\t63\t2837\t8942\t13413\t2837\t8942\t13413\r\n56\t336\t653\t970\t336\t768\t1141\t595\t1098\t2306\t595\t1098\t2306\t374\t1208\t2135\t374\t1208\t2847\t35\t47\t65\t35\t47\t65\t2941\t9477\t14216\t2941\t9477\t14216\r\n57\t342\t663\t984\t342\t780\t1158\t606\t1116\t2344\t606\t1116\t2344\t384\t1241\t2222\t384\t1241\t2962\t35\t47\t65\t35\t47\t65\t3045\t10044\t15066\t3045\t10044\t15066\r\n58\t348\t673\t1000\t348\t792\t1176\t617\t1134\t2382\t617\t1134\t2382\t395\t1276\t2308\t395\t1276\t3077\t36\t48\t67\t36\t48\t67\t3149\t10647\t15971\t3149\t10647\t15971\r\n59\t354\t683\t1015\t354\t804\t1194\t628\t1152\t2420\t628\t1152\t2420\t406\t1309\t2394\t406\t1309\t3192\t37\t49\t68\t37\t49\t68\t3253\t11286\t16929\t3253\t11286\t16929\r\n60\t360\t694\t1029\t360\t816\t1211\t639\t1170\t2458\t639\t1170\t2458\t418\t1344\t2480\t418\t1344\t3307\t37\t49\t68\t37\t49\t68\t3357\t11964\t17946\t3357\t11964\t17946\r\n61\t366\t704\t1045\t366\t828\t1229\t650\t1188\t2496\t650\t1188\t2496\t430\t1379\t2567\t430\t1379\t3422\t38\t51\t70\t38\t51\t70\t3461\t12680\t19020\t3461\t12680\t19020\r\n62\t372\t714\t1059\t372\t840\t1246\t661\t1206\t2534\t661\t1206\t2534\t442\t1412\t2653\t442\t1412\t3537\t38\t51\t70\t38\t51\t70\t3565\t13442\t20163\t3565\t13442\t20163\r\n63\t378\t724\t1074\t378\t852\t1264\t672\t1224\t2572\t672\t1224\t2572\t454\t1447\t2739\t454\t1447\t3652\t39\t52\t72\t39\t52\t72\t3669\t14249\t21374\t3669\t14249\t21374\r\n64\t384\t734\t1090\t384\t864\t1282\t683\t1242\t2610\t683\t1242\t2610\t466\t1480\t2825\t466\t1480\t3767\t39\t52\t72\t39\t52\t72\t3773\t15104\t22656\t3773\t15104\t22656\r\n65\t390\t745\t1104\t390\t876\t1299\t694\t1260\t2648\t694\t1260\t2648\t477\t1515\t2912\t477\t1515\t3882\t40\t53\t74\t40\t53\t74\t3877\t16010\t24015\t3877\t16010\t24015\r\n66\t396\t755\t1119\t396\t888\t1317\t705\t1278\t2686\t705\t1278\t2686\t489\t1549\t2998\t489\t1549\t3997\t41\t55\t76\t41\t55\t76\t3981\t16916\t25374\t3981\t16916\t25374\r\n67\t402\t765\t1134\t402\t900\t1334\t716\t1296\t2724\t716\t1296\t2724\t501\t1583\t3084\t501\t1583\t4112\t41\t55\t76\t41\t55\t76\t4085\t17822\t26733\t4085\t17822\t26733\r\n68\t408\t775\t1149\t408\t912\t1352\t727\t1314\t2762\t727\t1314\t2762\t513\t1617\t3170\t513\t1617\t4227\t42\t56\t78\t42\t56\t78\t4189\t18728\t28092\t4189\t18728\t28092\r\n69\t414\t785\t1165\t414\t924\t1370\t738\t1332\t2800\t738\t1332\t2800\t525\t1651\t3257\t525\t1651\t4342\t43\t57\t80\t43\t57\t80\t4293\t19634\t29451\t4293\t19634\t29451\r\n70\t420\t796\t1179\t420\t936\t1387\t749\t1350\t2838\t749\t1350\t2838\t539\t1685\t3343\t539\t1685\t4457\t43\t57\t80\t43\t57\t80\t4397\t20540\t30810\t4397\t20540\t30810\r\n71\t426\t806\t1194\t426\t948\t1405\t760\t1368\t2876\t760\t1368\t2876\t552\t1720\t3429\t552\t1720\t4572\t44\t59\t81\t44\t59\t81\t4501\t21446\t32169\t4501\t21446\t32169\r\n72\t432\t816\t1209\t432\t960\t1422\t771\t1386\t2914\t771\t1386\t2914\t565\t1753\t3515\t565\t1753\t4687\t44\t59\t81\t44\t59\t81\t4605\t22352\t33528\t4605\t22352\t33528\r\n73\t438\t826\t1224\t438\t972\t1440\t782\t1404\t2952\t782\t1404\t2952\t579\t1788\t3602\t579\t1788\t4802\t45\t60\t83\t45\t60\t83\t4709\t23258\t34887\t4709\t23258\t34887\r\n74\t444\t836\t1239\t444\t984\t1458\t793\t1422\t2990\t793\t1422\t2990\t592\t1821\t3688\t592\t1821\t4917\t46\t61\t85\t46\t61\t85\t4813\t24164\t36246\t4813\t24164\t36246\r\n75\t450\t847\t1254\t450\t996\t1475\t804\t1440\t3028\t804\t1440\t3028\t605\t1856\t3774\t605\t1856\t5032\t46\t61\t85\t46\t61\t85\t4917\t25070\t37605\t4917\t25070\t37605\r\n76\t456\t857\t1269\t456\t1008\t1493\t815\t1458\t3066\t815\t1458\t3066\t618\t1891\t3860\t618\t1891\t5147\t47\t63\t87\t47\t63\t87\t5021\t25976\t38964\t5021\t25976\t38964\r\n77\t462\t867\t1284\t462\t1020\t1510\t826\t1476\t3104\t826\t1476\t3104\t632\t1924\t3947\t632\t1924\t5262\t47\t63\t87\t47\t63\t87\t5125\t26882\t40323\t5125\t26882\t40323\r\n78\t468\t877\t1299\t468\t1032\t1528\t837\t1494\t3142\t837\t1494\t3142\t645\t1959\t4033\t645\t1959\t5377\t48\t64\t89\t48\t64\t89\t5229\t27788\t41682\t5229\t27788\t41682\r\n79\t474\t887\t1314\t474\t1044\t1546\t848\t1512\t3180\t848\t1512\t3180\t658\t1992\t4119\t658\t1992\t5492\t49\t65\t91\t49\t65\t91\t5333\t28694\t43041\t5333\t28694\t43041\r\n80\t480\t898\t1329\t480\t1056\t1563\t859\t1530\t3218\t859\t1530\t3218\t673\t2027\t4205\t673\t2027\t5607\t49\t65\t91\t49\t65\t91\t5437\t29600\t44400\t5437\t29600\t44400\r\n81\t486\t908\t1344\t486\t1068\t1581\t870\t1548\t3256\t870\t1548\t3256\t688\t2061\t4292\t688\t2061\t5722\t50\t67\t93\t50\t67\t93\t5541\t30506\t45759\t5541\t30506\t45759\r\n82\t492\t918\t1358\t492\t1080\t1598\t881\t1566\t3294\t881\t1566\t3294\t702\t2095\t4378\t702\t2095\t5837\t50\t67\t93\t50\t67\t93\t5645\t31412\t47118\t5645\t31412\t47118\r\n83\t498\t928\t1374\t498\t1092\t1616\t892\t1584\t3332\t892\t1584\t3332\t717\t2129\t4464\t717\t2129\t5952\t51\t68\t94\t51\t68\t94\t5749\t32318\t48477\t5749\t32318\t48477\r\n84\t504\t938\t1389\t504\t1104\t1634\t903\t1602\t3370\t903\t1602\t3370\t732\t2163\t4550\t732\t2163\t6067\t51\t68\t94\t51\t68\t94\t5853\t33224\t49836\t5853\t33224\t49836\r\n85\t510\t949\t1403\t510\t1116\t1651\t914\t1620\t3408\t914\t1620\t3408\t746\t2197\t4637\t746\t2197\t6182\t52\t69\t96\t52\t69\t96\t5957\t34130\t51195\t5957\t34130\t51195\r\n86\t516\t959\t1419\t516\t1128\t1669\t925\t1638\t3446\t925\t1638\t3446\t761\t2232\t4723\t761\t2232\t6297\t53\t70\t98\t53\t70\t98\t6061\t35036\t52554\t6061\t35036\t52554\r\n87\t522\t969\t1433\t522\t1140\t1686\t936\t1656\t3484\t936\t1656\t3484\t775\t2265\t4809\t775\t2265\t6412\t53\t70\t98\t53\t70\t98\t6165\t35942\t53913\t6165\t35942\t53913\r\n88\t528\t979\t1448\t528\t1152\t1704\t947\t1674\t3522\t947\t1674\t3522\t790\t2300\t4895\t790\t2300\t6527\t54\t72\t100\t54\t72\t100\t6269\t36848\t55272\t6269\t36848\t55272\r\n89\t534\t989\t1464\t534\t1164\t1722\t958\t1692\t3560\t958\t1692\t3560\t805\t2333\t4982\t805\t2333\t6642\t55\t73\t102\t55\t73\t102\t6373\t37754\t56631\t6373\t37754\t56631\r\n90\t540\t1000\t1478\t540\t1176\t1739\t969\t1710\t3598\t969\t1710\t3598\t821\t2368\t5068\t821\t2368\t6757\t55\t73\t102\t55\t73\t102\t6477\t38660\t57990\t6477\t38660\t57990\r\n91\t546\t1010\t1493\t546\t1188\t1757\t980\t1728\t3636\t980\t1728\t3636\t837\t2403\t5154\t837\t2403\t6872\t56\t74\t104\t56\t74\t104\t6581\t39566\t59349\t6581\t39566\t59349\r\n92\t552\t1020\t1508\t552\t1200\t1774\t991\t1746\t3674\t991\t1746\t3674\t853\t2436\t5240\t853\t2436\t6987\t56\t74\t104\t56\t74\t104\t6685\t40472\t60708\t6685\t40472\t60708\r\n93\t558\t1030\t1523\t558\t1212\t1792\t1002\t1764\t3712\t1002\t1764\t3712\t868\t2471\t5327\t868\t2471\t7102\t57\t76\t105\t57\t76\t105\t6789\t41378\t62067\t6789\t41378\t62067\r\n94\t564\t1040\t1539\t564\t1224\t1810\t1013\t1782\t3750\t1013\t1782\t3750\t884\t2504\t5413\t884\t2504\t7217\t58\t77\t107\t58\t77\t107\t6893\t42284\t63426\t6893\t42284\t63426\r\n95\t570\t1051\t1553\t570\t1236\t1827\t1024\t1800\t3788\t1024\t1800\t3788\t900\t2539\t5499\t900\t2539\t7332\t58\t77\t107\t58\t77\t107\t6997\t43190\t64785\t6997\t43190\t64785\r\n96\t576\t1061\t1568\t576\t1248\t1845\t1035\t1818\t3826\t1035\t1818\t3826\t916\t2573\t5585\t916\t2573\t7447\t59\t78\t109\t59\t78\t109\t7101\t44096\t66144\t7101\t44096\t66144\r\n97\t582\t1071\t1583\t582\t1260\t1862\t1046\t1836\t3864\t1046\t1836\t3864\t932\t2607\t5672\t932\t2607\t7562\t59\t78\t109\t59\t78\t109\t7205\t45002\t67503\t7205\t45002\t67503\r\n98\t588\t1081\t1598\t588\t1272\t1880\t1057\t1854\t3902\t1057\t1854\t3902\t948\t2641\t5758\t948\t2641\t7677\t60\t80\t111\t60\t80\t111\t7309\t45908\t68862\t7309\t45908\t68862\r\n99\t594\t1091\t1613\t594\t1284\t1898\t1068\t1872\t3940\t1068\t1872\t3940\t964\t2675\t5844\t964\t2675\t7792\t60\t80\t111\t60\t80\t111\t7413\t46814\t70221\t7413\t46814\t70221\r\n100\t600\t1102\t1628\t600\t1296\t1915\t1079\t1890\t3978\t1079\t1890\t3978\t982\t2709\t5930\t982\t2709\t7907\t61\t81\t113\t61\t81\t113\t7517\t47720\t71580\t7517\t47720\t71580\r\n101\t606\t1112\t1643\t606\t1308\t1933\t1090\t1908\t4016\t1090\t1908\t4016\t999\t2744\t6017\t999\t2744\t8022\t62\t82\t115\t62\t82\t115\t7621\t48626\t72939\t7621\t48626\t72939\r\n102\t612\t1122\t1658\t612\t1320\t1950\t1101\t1926\t4054\t1101\t1926\t4054\t1016\t2777\t6103\t1016\t2777\t8137\t62\t82\t115\t62\t82\t115\t7725\t49532\t74298\t7725\t49532\t74298\r\n103\t618\t1132\t1673\t618\t1332\t1968\t1112\t1944\t4092\t1112\t1944\t4092\t1033\t2812\t6189\t1033\t2812\t8252\t63\t84\t117\t63\t84\t117\t7829\t50438\t75657\t7829\t50438\t75657\r\n104\t624\t1142\t1688\t624\t1344\t1986\t1123\t1962\t4130\t1123\t1962\t4130\t1051\t2845\t6275\t1051\t2845\t8367\t63\t84\t117\t63\t84\t117\t7933\t51344\t77016\t7933\t51344\t77016\r\n105\t630\t1153\t1703\t630\t1356\t2003\t1134\t1980\t4168\t1134\t1980\t4168\t1068\t2880\t6362\t1068\t2880\t8482\t64\t85\t118\t64\t85\t118\t8037\t52250\t78375\t8037\t52250\t78375\r\n106\t636\t1163\t1718\t636\t1368\t2021\t1145\t1998\t4206\t1145\t1998\t4206\t1085\t2915\t6448\t1085\t2915\t8597\t65\t86\t120\t65\t86\t120\t8141\t53156\t79734\t8141\t53156\t79734\r\n107\t642\t1173\t1732\t642\t1380\t2038\t1156\t2016\t4244\t1156\t2016\t4244\t1103\t2948\t6534\t1103\t2948\t8712\t65\t86\t120\t65\t86\t120\t8245\t54062\t81093\t8245\t54062\t81093\r\n108\t648\t1183\t1748\t648\t1392\t2056\t1167\t2034\t4282\t1167\t2034\t4282\t1120\t2983\t6620\t1120\t2983\t8827\t66\t88\t122\t66\t88\t122\t8349\t54968\t82452\t8349\t54968\t82452\r\n109\t654\t1193\t1763\t654\t1404\t2074\t1178\t2052\t4320\t1178\t2052\t4320\t1137\t3016\t6707\t1137\t3016\t8942\t67\t89\t124\t67\t89\t124\t8453\t55874\t83811\t8453\t55874\t83811\r\n110\t2100\t2100\t2100\t2100\t2100\t2100\t6532\t6532\t6532\t6532\t6532\t6532\t10000\t10000\t10000\t10000\t10000\t10000\t130\t130\t130\t130\t130\t130\t160000\t160000\t160000\t160000\t160000\t160000\r\n";
+
+const $ = s => document.querySelector(s);
+function mlFactor(level, kind, d) { return S.ml.rows.get(level)[kind][d]; }
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); return true; } catch { return false; } },
+  del(k) { try { localStorage.removeItem(k); } catch {} },
+};
+
+const S = {
+  ml: null, mlName: "", mlBundled: false,
+  ms: null, msName: "monstats.txt", row: -1,
+  dirty: false, stored: true, writeLevel: false, manualName: "",
+  areas: null, arName: "", levelNames: null, lnName: "", monNames: null, monNamesLower: null, mnName: "",
+  monai: null, maName: "", ai: "", aiVals: null,
+  monprop: null, mpName: "", props: null, prName: "", isc: null, iscName: "", skills: null, skName: "", mods: null, modName: "", aiMem: new Map(), aiSource: "", aiOrig: null, area: null, normalPatch: false, spawnMapN: null, spawnMapNH: null, spawnNote: "", linkDiffs: false,
+  elemTypes: ELEM_TYPES_DEFAULT, etName: "", elType: ["", "", "", ""], pickMode: "monster", listAll: false, minionOf: "",
+  items: [], res: [], lvl: [null, null, null], lvlOk: [false, false, false],
+};
+const el = { tgt: [], cur: [], inp: [], out: [], lab: [], lvl: [], lvlFile: [], lvlMsg: [], elSel: [], elInfo: [], row: [] };
+
+// ---------- file bytes (latin1 keeps the round trip byte-exact) ----------
+function bytesToText(buf) {
+  const u = new Uint8Array(buf);
+  let s = "";
+  for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
+  return s;
+}
+function textToBytes(s) {
+  const u = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i) & 255;
+  return u;
+}
+
+// ---------- grid ----------
+function buildGrid() {
+  const dh = $("#grid thead tr.dhead"), sh = $("#grid thead tr.sub");
+  for (let d = 0; d < 3; d++) {
+    const th = document.createElement("th");
+    th.colSpan = 4; th.textContent = DIFF_NAME[d]; th.className = "g0"; th.scope = "colgroup";
+    dh.append(th);
+    ["Target", "Current", "Input", "Result"].forEach((t, k) => {
+      const h = document.createElement("th");
+      h.textContent = t; h.scope = "col";
+      h.className = (k === 0 ? "t " : "") + (k === 0 ? "g0" : "");
+      h.title = ["The value you want in game", "What the loaded file gives at this level",
+                 "What monstats.txt will hold", "What Input produces in game"][k];
+      sh.append(h);
+    });
+  }
+  const tb = $("#rows");
+  // Level row
+  const lr = document.createElement("tr");
+  lr.className = "lvl";
+  lr.innerHTML = '<th class="lab" scope="row">Level</th>';
+  for (let d = 0; d < 3; d++) {
+    const t = document.createElement("td"); t.className = "t g0";
+    const inp = document.createElement("input");
+    inp.inputMode = "numeric"; inp.maxLength = 3; inp.setAttribute("aria-label", DIFF_NAME[d] + " level");
+    inp.dataset.d = d; inp.dataset.i = -1;
+    t.append(inp); lr.append(t);
+    const f = document.createElement("td"); f.className = "num lvlmsg v-dim"; lr.append(f);
+    const m = document.createElement("td"); m.colSpan = 2; m.className = "lvlmsg"; lr.append(m);
+    el.lvl[d] = inp; el.lvlFile[d] = f; el.lvlMsg[d] = m;
+  }
+  tb.append(lr);
+
+  STATS.forEach((s, i) => {
+    if (s.elem && s.key.endsWith("MinD")) tb.append(buildTypeRow(s.elem));
+    const tr = document.createElement("tr");
+    if (!s.elem && (i === 0 || STATS[i - 1].sectionEnd)) tr.className = "sec";
+    el.row[i] = tr;
+    const th = document.createElement("th");
+    th.className = "lab"; th.scope = "row"; th.textContent = s.label;
+    tr.append(th); el.lab[i] = th;
+    el.tgt[i] = []; el.cur[i] = []; el.inp[i] = []; el.out[i] = [];
+    for (let d = 0; d < 3; d++) {
+      const t = document.createElement("td"); t.className = "t g0";
+      const inp = document.createElement("input");
+      inp.inputMode = "numeric"; inp.maxLength = 9;
+      inp.setAttribute("aria-label", DIFF_NAME[d] + " " + s.label + " target");
+      inp.dataset.d = d; inp.dataset.i = i;
+      t.append(inp); tr.append(t);
+      const c = document.createElement("td"), n = document.createElement("td"), o = document.createElement("td");
+      c.className = "num"; n.className = "num"; o.className = "num r";
+      tr.append(c, n, o);
+      el.tgt[i][d] = inp; el.cur[i][d] = c; el.inp[i][d] = n; el.out[i][d] = o;
+    }
+    tb.append(tr);
+  });
+
+  tb.addEventListener("input", e => {
+    const inp = e.target;
+    if (inp.tagName !== "INPUT" || inp.dataset.d === undefined) return;
+    const clean = inp.value.replace(/\D/g, "");
+    if (clean !== inp.value) inp.value = clean;
+    const d = +inp.dataset.d, i = +inp.dataset.i;
+    if (i >= 0) { inp.dataset.user = "1"; delete inp.dataset.linkInput; }
+    recompute(d);
+    if (i < 0) {
+      // Level changed: untouched targets follow the file, linked targets follow their Input
+      refillUntouched(d); recompute(d);
+      if (S.linkDiffs) relinkFrom(d);
+    } else if (S.linkDiffs) {
+      propagate(i, d);
+      recomputeAll();
+    }
+    // A duration feeds its slot's poison damage: linked cells follow their Input, sources re-solve and pass it on
+    if (i >= 0 && STATS[i].kind === "DUR") {
+      for (let e = 0; e < 3; e++) refillUntouched(e);
+      recomputeAll();
+      if (S.linkDiffs) for (let e = 0; e < 3; e++) relinkFrom(e);
+    }
+    render();
+  });
+  tb.addEventListener("focusin", e => { if (e.target.tagName === "INPUT") e.target.select(); });
+  tb.addEventListener("keydown", e => {
+    const inp = e.target;
+    if (inp.tagName !== "INPUT") return;
+    const d = +inp.dataset.d, i = +inp.dataset.i;
+    let to = null;
+    if (e.key === "ArrowDown" || e.key === "Enter") to = i + 1;
+    else if (e.key === "ArrowUp") to = i - 1;
+    if (to === null) return;
+    e.preventDefault();
+    if (to === -1) el.lvl[d].focus();
+    else if (to >= 0 && to < STATS.length) el.tgt[to][d].focus();
+  });
+}
+
+function buildTypeRow(slot) {
+  const tr = document.createElement("tr");
+  tr.className = "sec eltype";
+  const th = document.createElement("th");
+  th.className = "lab"; th.scope = "row";
+  const lab = document.createElement("label");
+  lab.htmlFor = "elType" + slot; lab.textContent = `El${slot} type`;
+  const sel = document.createElement("select");
+  sel.id = "elType" + slot;
+  sel.addEventListener("change", () => onElType(slot, sel.value));
+  th.append(lab, sel);
+  tr.append(th);
+  el.elSel[slot] = sel;
+  el.elInfo[slot] = [];
+  for (let d = 0; d < 3; d++) {
+    const td = document.createElement("td");
+    td.colSpan = 4; td.className = "g0 elinfo";
+    tr.append(td);
+    el.elInfo[slot][d] = td;
+  }
+  return tr;
+}
+
+// ---------- computation ----------
+// Poison and burning both run as a rate over time: damage x10 bits per frame, for ElDur x2 frames
+const DOT_TYPES = new Set(["pois", "burn"]);
+const isPoisSlot = slot => DOT_TYPES.has(S.elType[slot]);
+const dotWord = slot => S.elType[slot] === "burn" ? "burning" : "poison";
+const durLocked = slot => !DUR_TYPES.has(S.elType[slot]);
+const durIdx = slot => STATS.findIndex(s => s.key === `El${slot}Dur`);
+function durFileRaw(slot, d) { return S.row >= 0 ? msRaw(S.ms, S.row, STATS[durIdx(slot)], d) : null; }
+function durNewRaw(slot, d) {
+  const r = S.res[durIdx(slot)]?.[d];
+  if (!r) return null;
+  if (r.hasTarget && r.solved) return r.input;
+  return r.hasCur ? r.curRaw : null;
+}
+// In-game value that monstats value `raw` gives for stat i in difficulty d (null if it can't be known)
+function gameOf(i, d, raw, durRaw) {
+  const s = STATS[i];
+  if (s.kind === "DUR") return isPoisSlot(s.elem) ? raw * 2 : raw;
+  if (!S.lvlOk[d]) return null;
+  const v = forward(raw, mlFactor(S.lvl[d], s.kind, d));
+  if (s.elem && isPoisSlot(s.elem)) return durRaw > 0 ? poisonTotal(v, durRaw) : null;
+  return v;
+}
+// Same, using the duration the monster will have after this edit
+function gameNow(i, d, raw) {
+  const s = STATS[i];
+  return gameOf(i, d, raw, s.elem && s.kind !== "DUR" ? durNewRaw(s.elem, d) : null);
+}
+// Durations first: poison damage depends on them
+const ORDER = STATS.map((_, i) => i).sort((a, b) => (STATS[a].kind === "DUR" ? 0 : 1) - (STATS[b].kind === "DUR" ? 0 : 1));
+
+function recompute(d) {
+  const lv = toInt(el.lvl[d].value);
+  S.lvl[d] = lv;
+  S.lvlOk[d] = !!S.ml && lv !== null && S.ml.rows.has(lv);
+  for (const i of ORDER) {
+    const s = STATS[i];
+    const r = { hasCur: false, curRaw: 0, curGameOk: false, curGame: 0, hasTarget: false, targetBad: false,
+                target: 0, solved: false, input: 0, achieved: 0, pairBad: false, why: "" };
+    const isDur = s.kind === "DUR";
+    const pois = !isDur && s.elem && isPoisSlot(s.elem);
+    const locked = isDur && durLocked(s.elem);
+    const fileDur = pois ? durFileRaw(s.elem, d) : null;
+    const newDur = pois ? durNewRaw(s.elem, d) : null;
+    r.locked = locked; r.pois = pois; r.durRaw = newDur;
+    if (locked) el.tgt[i][d].value = "";
+    if (S.row >= 0) {
+      const raw = msRaw(S.ms, S.row, s, d);
+      if (raw !== null) {
+        r.hasCur = true; r.curRaw = raw;
+        const g = gameOf(i, d, raw, fileDur);
+        if (g !== null) { r.curGameOk = true; r.curGame = g; }
+      }
+    }
+    const tt = locked ? "" : el.tgt[i][d].value.trim();
+    if (tt) {
+      const v = toInt(tt);
+      if (v !== null && v >= 0) {
+        r.hasTarget = true; r.target = v;
+        const f = x => gameOf(i, d, x, newDur);
+        const m = isDur ? 1 : S.lvlOk[d] ? mlFactor(lv, s.kind, d) : 0;
+        if (f(1) === null || m <= 0) r.why = !isDur && !S.lvlOk[d] ? "Needs a valid level" : "Needs a duration first";
+        else {
+          r.solved = true;
+          const link = toInt(el.tgt[i][d].dataset.linkInput ?? "");
+          let sv;
+          if (link !== null && f(link) === v) sv = { input: link, achieved: v };
+          else if (r.hasCur && f(r.curRaw) === v) sv = { input: r.curRaw, achieved: v };
+          else sv = isDur || pois ? solveBy(v, f) : solve(v, m);
+          r.input = sv.input; r.achieved = sv.achieved;
+        }
+      } else r.targetBad = true;
+    }
+    r.clear = locked && r.hasCur;   // this type doesn't use a duration: blank the file's value
+    (S.res[i] ||= [])[d] = r;
+  }
+  const after = r => r.hasTarget && r.solved ? r.achieved : (!r.hasTarget && r.curGameOk ? r.curGame : null);
+  STATS.forEach((s, i) => {
+    if (s.pairMax < 0) return;
+    const a = S.res[i][d], b = S.res[s.pairMax][d];
+    const va = after(a), vb = after(b);
+    a.pairBad = b.pairBad = (a.hasTarget || b.hasTarget) && va !== null && vb !== null && va > vb;
+  });
+}
+const recomputeAll = () => { for (let d = 0; d < 3; d++) recompute(d); };
+
+function pending() {
+  if (S.row < 0) return 0;
+  let n = 0;
+  for (let d = 0; d < 3; d++) {
+    for (let i = 0; i < STATS.length; i++) {
+      const r = S.res[i][d];
+      if ((r.hasTarget && r.solved && (!r.hasCur || r.input !== r.curRaw)) || r.clear) n++;
+    }
+    if (S.writeLevel && S.lvl[d] !== null && msLevel(S.ms, S.row, d) !== S.lvl[d]) n++;
+  }
+  for (let k = 1; k <= 3; k++) if (S.elType[k] !== msElType(S.ms, S.row, k)) n++;
+  n += aiPending();
+  return n;
+}
+
+// ---------- rendering ----------
+function setCell(node, text, cls, note) {
+  if (node.textContent !== text) node.textContent = text;
+  const c = node.className.replace(/\s*v-\w+/g, "") + " " + cls;
+  if (node.className !== c) node.className = c;
+  if (note) node.dataset.note = note; else delete node.dataset.note;
+}
+const secs = frames => `${+(frames / 25).toFixed(2)}s`;
+
+function render() {
+  const editable = S.row >= 0 && !msNoRatio(S.ms, S.row);
+  for (let d = 0; d < 3; d++) {
+    const lt = el.lvl[d].value.trim();
+    const bad = lt !== "" && !!S.ml && !S.lvlOk[d];
+    el.lvl[d].classList.toggle("bad", bad);
+    const fromArea = areaDrives(d);
+    const fl = fromArea ? autoLevel(d) : S.row >= 0 ? msLevel(S.ms, S.row, d) : null;
+    setCell(el.lvlFile[d], fl !== null ? (fromArea ? "area " : "file ") + fl : "",
+            fl !== null && S.lvl[d] !== null && S.lvl[d] !== fl ? "v-orange" : "v-dim");
+    el.lvlFile[d].title = fromArea ? `${levelArea(d).name}, levels.txt` : fl !== null ? "monstats.txt Level" + DIFF_SUFFIX[d] : "";
+    let msg = "", cls = "v-dim";
+    if (!S.ml) msg = "load monlvl.txt";
+    else if (d === 0 && S.normalPatch && !levelArea(0) && S.row >= 0 && !isBoss()) { msg = "pick an area (patched)"; cls = "v-orange"; }
+    else if (bad) { msg = `not in monlvl (${S.ml.min}\u2013${S.ml.max})`; cls = "v-red"; }
+    else if (!lt) msg = "enter a level";
+    setCell(el.lvlMsg[d], msg, cls);
+  }
+  const noEdit = S.row >= 0 && msNoRatio(S.ms, S.row);
+  renderElTypes();
+  renderAI();
+  renderProps();
+  STATS.forEach((s, i) => {
+    const isDur = s.kind === "DUR";
+    const locked = isDur && durLocked(s.elem);
+    const pois = !isDur && s.elem && isPoisSlot(s.elem);
+    const hint = isDur ? (locked ? " (not used)" : isPoisSlot(s.elem) ? ` (frames, x2 for ${dotWord(s.elem)})` : " (frames)")
+                       : pois ? ` (${dotWord(s.elem)} total)` : "";
+    const unused = S.row >= 0 && ![0, 1, 2].some(d => S.res[i][d].hasCur);
+    const want = s.label + "|" + hint;
+    if (el.lab[i].dataset.v !== want) {
+      el.lab[i].dataset.v = want;
+      el.lab[i].textContent = s.label;
+      if (hint) { const sp = document.createElement("span"); sp.className = "el"; sp.textContent = hint; el.lab[i].append(sp); }
+    }
+    el.lab[i].classList.toggle("unused", unused);
+    el.row[i].classList.toggle("locked", locked);
+    for (let d = 0; d < 3; d++) {
+      const r = S.res[i][d];
+      const t = el.tgt[i][d];
+      t.disabled = noEdit || locked;
+      t.classList.toggle("bad", r.targetBad);
+      const linked = !!t.dataset.linkInput;
+      t.classList.toggle("linked", linked);
+      t.title = locked ? `Duration only applies to cold, poison, stun, burning and freeze` :
+                linked ? `Linked: same Input (${t.dataset.linkInput}) as the difficulty you edited` : "";
+      setCell(el.cur[i][d], r.curGameOk ? String(r.curGame) : r.hasCur ? "?" : "\u2013", r.curGameOk ? "v-dim" : "v-faint");
+      el.cur[i][d].title = r.hasCur && !r.curGameOk ? (pois ? `The file's duration is 0, so this ${dotWord(s.elem)} does nothing` : "Needs a valid level") : "";
+      if (r.clear) setCell(el.inp[i][d], "blank", "v-gold");
+      else if (r.hasTarget) {
+        if (r.solved) setCell(el.inp[i][d], String(r.input), S.row >= 0 && (!r.hasCur || r.input !== r.curRaw) ? "v-gold" : "v-text");
+        else setCell(el.inp[i][d], "?", "v-red");
+      } else setCell(el.inp[i][d], r.hasCur ? String(r.curRaw) : "\u2013", r.hasCur ? "v-dim" : "v-faint");
+      el.inp[i][d].title = r.clear ? `Apply clears ${statCol(s, d)}, since this element type doesn't use a duration`
+                         : r.hasTarget && !r.solved ? r.why : "";
+      const shown = r.clear ? null : r.hasTarget && r.solved ? r.achieved : !r.hasTarget && r.curGameOk ? r.curGame : null;
+      const notes = [];
+      if (r.hasTarget && r.solved && r.achieved !== r.target) notes.push(`(${r.achieved > r.target ? "+" : ""}${r.achieved - r.target})`);
+      if (shown !== null && isDur && !locked) notes.push(secs(shown));
+      if (shown === null) setCell(el.out[i][d], "\u2013", "v-faint");
+      else setCell(el.out[i][d], String(shown),
+        r.pairBad ? "v-red" : r.hasTarget ? (r.achieved !== r.target ? "v-orange" : "v-text") : "v-dim", notes.join(" "));
+      // Poison: show the engine's rate and length for checking in game
+      if (pois && shown !== null) {
+        const raw = r.hasTarget ? r.input : r.curRaw;
+        const dur = r.hasTarget ? r.durRaw : durFileRaw(s.elem, d);
+        const v = forward(raw, mlFactor(S.lvl[d], s.kind, d));
+        el.out[i][d].title = `${shown} ${dotWord(s.elem)} damage over ${secs(dur * 2)}: ${v * 10} bits per frame for ${dur * 2} frames`;
+      } else el.out[i][d].title = "";
+    }
+  });
+
+  const n = pending();
+  const ap = $("#apply");
+  ap.disabled = !(editable && n > 0);
+  ap.textContent = n > 0 ? `Apply ${n} ${n === 1 ? "change" : "changes"}` : "Apply to monstats";
+  $("#download").disabled = !S.ms;
+  $("#fill").disabled = S.row < 0;
+  $("#writeLevel").disabled = S.row < 0;
+  $("#wlWrap").classList.toggle("off", S.row < 0);
+  renderName();
+  renderArea();
+  if (S.ms) mon.placeholder = S.pickMode === "area" || S.areas ? "Type a monster or an area" : "Type to search monsters";
+  renderInfo();
+  renderFiles();
+  document.title = (S.dirty ? "* " : "") + "Monster stat solver for D2R";
+}
+
+// Monster name: typed freely in manual entry, locked to the file's monster otherwise
+const monName = $("#monName");
+function renderName() {
+  const locked = S.row >= 0;
+  const want = locked ? itemText(S.row) : S.manualName;
+  if (monName.readOnly !== locked) monName.readOnly = locked;
+  if (monName.value !== want) monName.value = want;
+  $("#nameNote").hidden = !locked;
+}
+monName.addEventListener("input", () => {
+  if (monName.readOnly) return;
+  S.manualName = monName.value;
+  store.set("msolver.manualName", S.manualName);
+});
+
+// ---------- AI ----------
+const AI_BUILTIN = {
+  aidel: "aidel: frames between the AI's decisions (25 frames = 1 second). Lower values make the monster act more often.",
+  aidist: "aidist: how far away (in tiles) the AI notices and engages targets. Blank uses the AI's default.",
+};
+const aiEl = { sel: null, heads: {}, inputs: {} };
+function buildAITable() {
+  aiEl.sel = $("#aiSel");
+  const head = $("#aiTable thead tr"), body = $("#aiTable tbody");
+  for (const k of AI_COLS) {
+    const th = document.createElement("th");
+    th.scope = "col";
+    const sp = document.createElement("span");
+    sp.textContent = k; sp.tabIndex = 0;
+    th.append(sp); head.append(th);
+    aiEl.heads[k] = th;
+  }
+  aiEl.inputs = {};
+  for (let d = 0; d < 3; d++) {
+    const tr = document.createElement("tr");
+    const th = document.createElement("th");
+    th.scope = "row"; th.textContent = DIFF_NAME[d];
+    tr.append(th);
+    for (const k of AI_COLS) {
+      const td = document.createElement("td");
+      const inp = document.createElement("input");
+      inp.inputMode = "numeric"; inp.maxLength = 7;
+      inp.setAttribute("aria-label", `${DIFF_NAME[d]} ${k}`);
+      inp.addEventListener("input", () => {
+        const clean = inp.value.replace(/[^\d-]/g, "").replace(/(?!^)-/g, "");
+        if (clean !== inp.value) inp.value = clean;
+        S.aiVals[k][d] = inp.value.trim();
+        render();
+      });
+      td.append(inp); tr.append(td);
+      (aiEl.inputs[k] ||= [])[d] = inp;
+    }
+    body.append(tr);
+  }
+  aiEl.sel.addEventListener("change", () => switchAI(aiEl.sel.value));
+}
+const aiFileVal = (k, d) => S.row >= 0 ? msGet(S.ms, S.row, k + DIFF_SUFFIX[d]).trim() : "";
+const aiValsOf = row => Object.fromEntries(AI_COLS.map(k => [k, [0, 1, 2].map(d => row >= 0 ? msGet(S.ms, row, k + DIFF_SUFFIX[d]).trim() : "")]));
+const cloneVals = v => Object.fromEntries(AI_COLS.map(k => [k, v[k].slice()]));
+function loadAIFromRow(row) {
+  S.ai = row >= 0 ? msGet(S.ms, row, "AI").trim() : "";
+  S.aiVals = aiValsOf(row);
+  S.aiSource = row >= 0 ? "Parameters from monstats.txt." : "";
+  // Per-monster memory of each AI's parameters this session; the file's own AI always starts from the file
+  if (row >= 0) {
+    if (!S.aiMem.has(row)) S.aiMem.set(row, new Map());
+    S.aiOrig = { ai: S.ai, vals: cloneVals(S.aiVals) };
+  }
+}
+// Switching AI: remember the outgoing parameters, then restore the incoming AI's from this session,
+// or copy them from the first monster in monstats.txt that uses it
+function switchAI(next) {
+  const prev = S.ai;
+  if (next === prev) return;
+  if (S.row >= 0) {
+    const mem = S.aiMem.get(S.row);
+    const orig = S.aiOrig;
+    // The monster's original AI keeps its first-read parameters; other AIs remember what you last had
+    if (prev !== orig.ai) mem.set(prev, cloneVals(S.aiVals));
+    if (next === orig.ai) {
+      S.aiVals = cloneVals(orig.vals);
+      S.aiSource = "Parameters from monstats.txt, as first read.";
+    } else if (mem.has(next)) {
+      S.aiVals = cloneVals(mem.get(next));
+      S.aiSource = `Parameters you had for ${next} earlier.`;
+    } else {
+      const src = next ? S.ms.order.find(r => msGet(S.ms, r, "AI").trim().toLowerCase() === next.toLowerCase()) : undefined;
+      S.aiVals = aiValsOf(src ?? -1);
+      S.aiSource = !next ? "No AI: parameters cleared." : src !== undefined
+        ? `Parameters copied from ${msGet(S.ms, src, "Id").trim()}, the first monster using ${next}.`
+        : `No monster in monstats.txt uses ${next}, so the parameters start blank.`;
+    }
+  }
+  S.ai = next;
+  // Refresh every box, including one that still has focus
+  for (const k of AI_COLS) for (let d = 0; d < 3; d++) aiEl.inputs[k][d].value = S.aiVals[k][d];
+  status(`AI set to ${next || "none"}. ${S.aiSource}` + (S.row >= 0 ? " Apply to write it to monstats.txt." : ""));
+  render();
+}
+function aiPending() {
+  if (S.row < 0) return 0;
+  let n = S.ai !== msGet(S.ms, S.row, "AI").trim() ? 1 : 0;
+  for (const k of AI_COLS) for (let d = 0; d < 3; d++) if (S.aiVals[k][d] !== aiFileVal(k, d)) n++;
+  return n;
+}
+function aiNames() {
+  if (S.monai) return S.monai.map(x => x.name);
+  // Without monai.txt: every AI monstats.txt uses
+  if (!S.ms) return [];
+  const set = new Set(S.ms.order.map(r => msGet(S.ms, r, "AI").trim()).filter(Boolean));
+  return [...set].sort((a, b) => a.localeCompare(b));
+}
+function renderAI() {
+  if (!S.aiVals) loadAIFromRow(-1);
+  const sel = aiEl.sel;
+  const names = aiNames();
+  if (S.ai && !names.includes(S.ai)) names.push(S.ai);
+  const key = names.join("|") + "#" + (S.monai ? "m" : "");
+  if (sel.dataset.key !== key) {
+    sel.dataset.key = key;
+    sel.replaceChildren(new Option("None", ""));
+    for (const n of names) sel.append(new Option(S.monai && !S.monai.some(x => x.name === n) ? `${n} (not in monai.txt)` : n, n));
+  }
+  if (sel.value !== S.ai) sel.value = S.ai;
+  const locked = S.row < 0 || msNoRatio(S.ms, S.row);
+  sel.disabled = locked;
+  const fileAI = S.row >= 0 ? msGet(S.ms, S.row, "AI").trim() : "";
+  sel.classList.toggle("v-gold", S.row >= 0 && S.ai !== fileAI);
+  sel.title = S.row >= 0 && S.ai !== fileAI ? `Will change AI from "${fileAI || "none"}" to "${S.ai || "none"}"` : "";
+
+  const info = S.monai ? S.monai.find(x => x.name === S.ai) : null;
+  let note = "";
+  if (S.row < 0) note = S.ms ? "Pick a monster to see and edit its AI." : "Load monstats.txt to see monster AI.";
+  else if (!S.monai) note = "Load monai.txt to see what each aip column does. Hover a column name for details.";
+  else if (!info) note = S.ai ? `${S.ai} isn't in monai.txt.` : "";
+  else note = info.note || "Hover a column name to see what it does for this AI.";
+  if (S.row >= 0 && S.aiSource) note = S.aiSource + (note ? " " + note : "");
+  if ($("#aiNote").textContent !== note) $("#aiNote").textContent = note;
+
+  for (const k of AI_COLS) {
+    const th = aiEl.heads[k];
+    let desc, unused = false;
+    if (AI_BUILTIN[k]) desc = AI_BUILTIN[k];
+    else if (!S.monai) desc = `${k}: load monai.txt to see what this parameter does for ${S.ai || "this AI"}.`;
+    else if (!info) desc = `${k}: ${S.ai || "no AI"} isn't described in monai.txt.`;
+    else if (info.desc[k]) desc = `${k} (${S.ai}): ${info.desc[k]}`;
+    else { desc = `${k}: not used by ${S.ai}.`; unused = true; }
+    th.firstChild.title = desc;
+    th.classList.toggle("unused", unused);
+    for (let d = 0; d < 3; d++) {
+      const inp = aiEl.inputs[k][d];
+      const v = S.aiVals[k][d];
+      if (document.activeElement !== inp && inp.value !== v) inp.value = v;
+      inp.disabled = locked;
+      const changed = S.row >= 0 && v !== aiFileVal(k, d);
+      inp.classList.toggle("changed", changed);
+      inp.title = changed ? `monstats.txt has "${aiFileVal(k, d) || "blank"}"; Apply writes "${v || "blank"}"` : desc;
+    }
+  }
+}
+
+// ---------- property descriptions (itemstatcost descfunc / descval) ----------
+const CLASSES = ["Amazon", "Sorceress", "Necromancer", "Paladin", "Barbarian", "Druid", "Assassin", "Warlock"];
+const CLASS_CODES = { ama: "Amazon", sor: "Sorceress", nec: "Necromancer", pal: "Paladin", bar: "Barbarian", dru: "Druid", ass: "Assassin", war: "Warlock" };
+function modStr(key) {
+  if (!key) return "";
+  if (!S.mods) return key;
+  return S.mods.get(key) ?? S.modsLower.get(key.toLowerCase()) ?? key;
+}
+function skillInfo(par) {
+  if (!S.skills) return { name: par ? `skill ${par}` : "a skill", cls: "" };
+  const n = toInt(par);
+  const e = n !== null ? S.skillsById.get(n) : S.skillsByName.get(String(par).toLowerCase());
+  return e ? { name: e[1], cls: CLASS_CODES[e[2]] || "" } : { name: `skill ${par}`, cls: "" };
+}
+// Value text for a min..max range, optionally scaled and signed
+function rng(lo, hi, f = x => x, sign = false) {
+  const a = f(lo), b = f(hi);
+  const t = a === b ? `${a}` : `${a}-${b}`;
+  return sign && a >= 0 ? "+" + t : t;
+}
+// sprintf with %d, %+d, %s, %% (numbers may be range strings)
+function sprintfD2(fmt, args) {
+  let i = 0;
+  return fmt.replace(/%(\+?)(d|s|%)/g, (m, plus, k) => {
+    if (k === "%") return "%";
+    const v = args[i++];
+    if (v === undefined) return "";
+    return plus && !String(v).startsWith("-") && !String(v).startsWith("+") ? "+" + v : String(v);
+  });
+}
+const hasFmt = str => /%(\+?)[ds]/.test(str);
+
+// One description line for a stat (or dgrp group) with its value
+function describeStat(d, it) {
+  const func = d.func;
+  if (!func) return null;
+  const neg = it.lo < 0 && it.hi <= 0;
+  const str = modStr(neg && d.strneg ? d.strneg : d.strpos), str2 = modStr(d.str2);
+  const lo = it.lo, hi = it.hi;
+  // Numeric part for the simple functions; descval places it (0 none, 1 before, 2 after)
+  const place = (num, text, tail) => {
+    const body = d.val === 0 ? text : d.val === 2 ? `${text} ${num}` : `${num} ${text}`;
+    return tail ? `${body} ${tail}` : body;
+  };
+  if ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 20, 21].includes(func) && hasFmt(str)) return sprintfD2(str, [rng(lo, hi)]);
+  switch (func) {
+    case 1: case 12: return place(rng(lo, hi, x => x, true), str);
+    case 2: return place(rng(lo, hi) + "%", str);
+    case 3: return place(rng(lo, hi), str);
+    case 4: return place(rng(lo, hi, x => x, true) + "%", str);
+    case 5: return place(rng(lo, hi, x => Math.floor(x * 100 / 128)) + "%", str);
+    case 6: return place(rng(lo, hi, x => x, true), str, str2);
+    case 7: return place(rng(lo, hi) + "%", str, str2);
+    case 8: return place(rng(lo, hi, x => x, true) + "%", str, str2);
+    case 9: return place(rng(lo, hi), str, str2);
+    case 10: return place(rng(lo, hi, x => Math.floor(x * 100 / 128)) + "%", str, str2);
+    case 11: return `Repairs 1 Durability in ${rng(lo, hi, x => x ? Math.floor(100 / x) : 0)} Seconds`;
+    case 13: return `+${rng(lo, hi)} to ${CLASSES[toInt(it.par) ?? -1] || "class " + it.par} Skill Levels`;
+    case 14: {
+      const p = toInt(it.par) ?? 0;
+      return `+${rng(lo, hi)} to ${CLASSES[p >> 3] || "class"} skill tab ${(p & 7) + 1} (${CLASSES[p >> 3] || "class"} Only)`;
+    }
+    case 15: {
+      const sk = skillInfo(it.par);
+      return hasFmt(str) ? sprintfD2(str, [it.chance, it.level, sk.name]) : `${it.chance}% Chance to cast level ${it.level} ${sk.name}`;
+    }
+    case 16: {
+      const sk = skillInfo(it.par);
+      return hasFmt(str) ? sprintfD2(str, [rng(lo, hi), sk.name]) : `Level ${rng(lo, hi)} ${sk.name} Aura When Equipped`;
+    }
+    case 17: return `${rng(lo, hi)} ${str} (Increases near ${it.par})`;
+    case 18: return `${rng(lo, hi)}% ${str} (Increases near ${it.par})`;
+    case 19: return hasFmt(str) ? sprintfD2(str, [rng(lo, hi)]) : `${rng(lo, hi)} ${str}`;
+    case 20: return place(rng(lo, hi, x => -x) + "%", str);
+    case 21: return place(rng(lo, hi, x => -x), str);
+    case 22: case 23: return `${rng(lo, hi)}% ${str} ${it.par}`;
+    case 24: {
+      const sk = skillInfo(it.par);
+      return hasFmt(str) ? sprintfD2(str, [it.level, sk.name, it.charges, it.charges]) : `Level ${it.level} ${sk.name} (${it.charges}/${it.charges} Charges)`;
+    }
+    case 27: {
+      const sk = skillInfo(it.par);
+      return hasFmt(str) ? sprintfD2(str, [rng(lo, hi), sk.name, sk.cls]) : `+${rng(lo, hi)} to ${sk.name}` + (sk.cls ? ` (${sk.cls} Only)` : "");
+    }
+    case 28: {
+      const sk = skillInfo(it.par);
+      return hasFmt(str) ? sprintfD2(str, [rng(lo, hi), sk.name]) : `+${rng(lo, hi)} to ${sk.name}`;
+    }
+    default: return hasFmt(str) ? sprintfD2(str, [rng(lo, hi)]) : `${rng(lo, hi, x => x, true)} ${str}`.trim();
+  }
+}
+const IMPLIED_STAT = { 5: "mindamage", 6: "maxdamage", 7: "item_maxdamage_percent" };
+// A MonProp entry -> description lines
+function describeProp(p) {
+  const code = p.prop;
+  const min = toInt(p.min) ?? 0, max = toInt(p.max) ?? min, par = p.par;
+  if (!S.props || !S.isc) return null;
+  const pr = S.props.get(code.toLowerCase());
+  if (!pr) return null;
+  const items = [];
+  let prev = { lo: min, hi: max };
+  for (const e of pr.entries) {
+    const statName = e.stat || IMPLIED_STAT[e.func];
+    if (!statName) continue;
+    const isc = S.isc.map.get(statName.toLowerCase());
+    let it = { stat: statName, isc, par, lo: min, hi: max };
+    if (e.func === 11) it = { ...it, chance: min, level: max, lo: min, hi: min };        // skill on event: min = chance, max = level
+    else if (e.func === 19) it = { ...it, charges: min, level: max, lo: max, hi: max };  // charges: min = charges, max = level
+    else if (e.func === 3) it = { ...it, lo: prev.lo, hi: prev.hi };                   // same value as the previous stat
+    else if (e.func === 17) { const v = +(((toInt(par) ?? 0) / 8).toFixed(3)); it = { ...it, lo: v, hi: v, perLevel: true }; }
+    prev = { lo: it.lo, hi: it.hi };
+    items.push(it);
+  }
+  if (!items.length) return null;
+  // dgrp: every stat of a group present with the same value -> one group line
+  const lines = [], used = new Set();
+  const groups = new Map();
+  items.forEach((it, k) => { if (it.isc?.dgrp) { const g = it.isc.dgrp; if (!groups.has(g)) groups.set(g, []); groups.get(g).push(k); } });
+  for (const [g, ks] of groups) {
+    const first = items[ks[0]];
+    if (ks.length === S.isc.dgrpCount.get(g) && ks.every(k => items[k].lo === first.lo && items[k].hi === first.hi) && first.isc.dgrpfunc) {
+      const i = first.isc;
+      lines.push(describeStat({ func: i.dgrpfunc, val: i.dgrpval, strpos: i.dgrpstrpos, strneg: i.dgrpstrneg, str2: i.dgrpstr2 }, first));
+      ks.forEach(k => used.add(k));
+    }
+  }
+  items.forEach((it, k) => {
+    if (used.has(k) || !it.isc) return;
+    const i = it.isc;
+    let line = describeStat({ func: i.descfunc, val: i.descval, strpos: i.descstrpos, strneg: i.descstrneg, str2: i.descstr2 }, it);
+    if (line && it.perLevel) line += " (per character level)";
+    if (line) lines.push(line);
+  });
+  return lines.length ? lines : null;
+}
+
+// ---------- properties section ----------
+function renderProps() {
+  const note = $("#propNote"), table = $("#propTable"), body = $("#propTable tbody");
+  const key = S.row >= 0 ? msGet(S.ms, S.row, "MonProp").trim() : "";
+  const entry = key && S.monprop ? S.monprop.get(key.toLowerCase()) : null;
+  let msg = "";
+  if (S.row < 0) msg = S.ms ? "Pick a monster to see its MonProp.txt properties." : "Load monstats.txt to see monster properties.";
+  else if (!key) msg = "This monster has no MonProp entry.";
+  else if (!S.monprop) msg = `MonProp ${key}. Load MonProp.txt to see its properties.`;
+  else if (!entry) msg = `MonProp ${key} isn't in MonProp.txt.`;
+  else {
+    const missing = [!S.props && "properties.txt", !S.isc && "itemstatcost.txt", !S.mods && "item-modifiers.json", !S.skills && "skills.txt"].filter(Boolean);
+    msg = `MonProp ${entry.id}. A blank chance counts as 100%.` + (missing.length ? ` Load ${missing.join(", ")} for full descriptions.` : "");
+  }
+  if (note.textContent !== msg) note.textContent = msg;
+  const sig = JSON.stringify([entry?.id, !!S.props, !!S.isc, !!S.mods, !!S.skills, S.row]);
+  if (table.dataset.sig === sig) return;
+  table.dataset.sig = sig;
+  body.replaceChildren();
+  table.hidden = !entry || !entry.diffs.some(x => x.length);
+  if (table.hidden) return;
+  const slots = [...new Set(entry.diffs.flatMap(x => x.map(p => p.slot)))].sort((a, b) => a - b);
+  for (const n of slots) {
+    const tr = document.createElement("tr");
+    const th = document.createElement("th"); th.scope = "row"; th.textContent = "prop" + n;
+    tr.append(th);
+    for (let d = 0; d < 3; d++) {
+      const td = document.createElement("td");
+      const p = entry.diffs[d].find(x => x.slot === n);
+      if (p) {
+        const lines = describeProp(p);
+        const chance = p.chance === "" ? 100 : toInt(p.chance) ?? p.chance;
+        const raw = `${p.prop}` + [p.par && `par ${p.par}`, (p.min || p.max) && `min ${p.min || "blank"}, max ${p.max || "blank"}`].filter(Boolean).map(x => " " + x).join(",");
+        const row = document.createElement("div"); row.className = "prop";
+        const dsc = document.createElement("span"); dsc.className = "pd" + (lines ? "" : " raw");
+        dsc.textContent = lines ? lines.join(", ") : raw;
+        const ch = document.createElement("span"); ch.className = "pc"; ch.textContent = `${chance}%`;
+        row.title = `prop${n}${DIFF_SUFFIX[d] ? " " + DIFF_SUFFIX[d] : ""}: ${raw}; chance ${p.chance === "" ? "blank (100%)" : p.chance + "%"}`;
+        row.append(dsc, ch); td.append(row);
+      }
+      tr.append(td);
+    }
+    body.append(tr);
+  }
+}
+
+function renderElTypes() {
+  for (let k = 1; k <= 3; k++) {
+    const sel = el.elSel[k];
+    const cur = S.elType[k];
+    const list = S.elemTypes.slice();
+    if (cur && !list.some(x => x.code === cur)) list.push({ code: cur, name: `${cur} (not in elemtypes.txt)` });
+    const key = list.map(x => x.code + "=" + x.name).join(",");
+    if (sel.dataset.key !== key) {
+      sel.dataset.key = key;
+      sel.replaceChildren(new Option("None", ""));
+      list.forEach(x => sel.append(new Option(x.name === x.code ? x.code : `${x.name} (${x.code})`, x.code)));
+    }
+    if (sel.value !== cur) sel.value = cur;
+    sel.disabled = S.row >= 0 && msNoRatio(S.ms, S.row);
+    const changed = S.row >= 0 && cur !== msElType(S.ms, S.row, k);
+    sel.classList.toggle("v-gold", changed);
+    sel.title = changed ? `Will change El${k}Type from "${msElType(S.ms, S.row, k) || "none"}" to "${cur || "none"}"` : "";
+    for (let d = 0; d < 3; d++) {
+      const td = el.elInfo[k][d];
+      let text = "", warn = false;
+      if (S.row >= 0) {
+        const mode = msGet(S.ms, S.row, `El${k}Mode`).trim();
+        const pct = msGet(S.ms, S.row, `El${k}Pct` + DIFF_SUFFIX[d]).trim();
+        if (cur && !mode) { text = `El${k}Mode is blank, so this element never triggers`; warn = true; }
+        else if (mode) text = `On ${mode} attacks, ${pct || 0}% of hits`;
+      }
+      if (td.textContent !== text) td.textContent = text;
+      td.classList.toggle("warn", warn);
+    }
+  }
+}
+
+function onElType(slot, code) {
+  S.elType[slot] = code;
+  // Untouched targets in this slot switch to the new element's meaning (poison totals, durations)
+  STATS.forEach((s, i) => { if (s.elem === slot) for (let d = 0; d < 3; d++) {
+    const t = el.tgt[i][d];
+    if (s.kind === "DUR" || !t.dataset.user) { delete t.dataset.user; delete t.dataset.linkInput; }
+  } });
+  recomputeAll();
+  for (let d = 0; d < 3; d++) refillUntouched(d);
+  recomputeAll();
+  const name = S.elemTypes.find(x => x.code === code)?.name || code || "none";
+  status(`El${slot} type set to ${name}.` + (DUR_TYPES.has(code) ? " Its duration row is now editable." :
+    " Its duration row is locked, and any duration in the file will be cleared when you apply."));
+  render();
+}
+
+function renderInfo() {
+  const info = $("#info");
+  info.replaceChildren();
+  const add = (dt, dd, warn) => {
+    const w = document.createElement("div");
+    const a = document.createElement("dt"), b = document.createElement("dd");
+    a.textContent = dt; b.textContent = dd;
+    if (warn) w.className = "warn";
+    w.append(a, b); info.append(w);
+  };
+  if (!S.ms || S.row < 0) {
+    const p = document.createElement("div");
+    p.textContent = S.ms ? "Manual entry. Nothing is written to monstats.txt." : "Manual entry. Type a level and targets to see the inputs.";
+    info.append(p);
+    return;
+  }
+  const r = S.row;
+  if (msNoRatio(S.ms, r)) { add("noRatio", "stats come from the summoning skill; editing is off", true); return; }
+  add("Base", msGet(S.ms, r, "BaseId").trim() || "\u2013");
+  add("Type", msGet(S.ms, r, "MonType").trim() || "\u2013");
+  add("File levels", [0, 1, 2].map(d => msLevel(S.ms, r, d) ?? "\u2013").join(" / "));
+  if ((toInt(msGet(S.ms, r, "boss")) ?? 0) !== 0) add("Boss", "yes");
+}
+
+function renderFiles() {
+  const ls = $("#lvlStatus");
+  if (S.ml) {
+    ls.className = "ok";
+    ls.textContent = `${S.mlBundled ? "Built-in copy" : S.mlName}, levels ${S.ml.min}\u2013${S.ml.max}`;
+  }
+  const et = $("#etStatus");
+  if (S.etName) { et.className = "ok"; et.textContent = `${S.etName}, ${S.elemTypes.length} element types`; }
+  renderPropFiles();
+  const ais = $("#aiStatus");
+  if (S.monai) { ais.className = "ok"; ais.textContent = `${S.maName}, ${S.monai.length} AI types`; }
+  const mn = $("#mnStatus");
+  if (S.monNames) {
+    mn.className = "ok";
+    const hits = S.items.filter(it => it.key && monEnName(it.key) !== it.key).length;
+    mn.textContent = `${S.mnName}, ${S.monNames.size} names` + (S.ms ? `, ${hits} of ${S.items.length} monsters matched` : "");
+  }
+  const ln = $("#lnStatus");
+  if (S.levelNames) {
+    ln.className = "ok";
+    const hits = S.areas ? S.areas.filter(a => a.key && (S.levelNames.has(a.key) || [...S.levelNames.keys()].some(k => k.toLowerCase() === a.key.toLowerCase()))).length : 0;
+    ln.textContent = `${S.lnName}, ${S.levelNames.size} names` + (S.areas ? `, ${hits} of ${S.areas.length} areas matched` : "");
+  }
+  const ar = $("#arStatus");
+  if (S.areas) { ar.className = "ok"; ar.textContent = `${S.arName}, ${S.areas.length} areas with monsters`; }
+  const ms = $("#msStatus");
+  if (S.ms) {
+    ms.className = "ok";
+    ms.textContent = `${S.msName}, ${S.ms.order.length} monsters` + (S.dirty ? ", edited (download to keep a copy)" : "");
+  }
+  renderDataFolder();
+}
+
+function status(msg, kind = "") {
+  const s = $("#status");
+  s.textContent = msg;
+  s.className = kind;
+}
+
+// ---------- monster picker ----------
+const mon = $("#mon"), monList = $("#monList");
+let listItems = [], active = -1;
+
+function itemText(row) {
+  if (row < 0) return "";
+  const it = S.items.find(x => x.row === row);
+  return it ? it.text : "";
+}
+// Monster names: NameStr looked up in monsters.json (enUS); falls back to the NameStr key
+function monEnName(key) {
+  if (!key || !S.monNames) return key;
+  return S.monNames.get(key) ?? S.monNamesLower.get(key.toLowerCase()) ?? key;
+}
+function buildItems() {
+  if (!S.ms) return;
+  S.items = S.ms.order.map(r => {
+    const id = msGet(S.ms, r, "Id").trim();
+    const key = msGet(S.ms, r, "NameStr").trim();
+    const en = monEnName(key);
+    const name = en && en.toLowerCase() !== id.toLowerCase() ? en : "";
+    const text = name ? `${id} (${name})` : id;
+    return { row: r, id, key, name, text, low: `${id} ${name} ${key}`.toLowerCase() };
+  });
+}
+function monText() {
+  const t = itemText(S.row);
+  return t && S.pickMode === "area" && S.area ? `${t} in ${S.area.name}` : t;
+}
+function markText(parent, text, q) {
+  const k = q ? text.toLowerCase().indexOf(q) : -1;
+  if (k < 0) { parent.textContent = text; return; }
+  const m = document.createElement("mark");
+  m.textContent = text.slice(k, k + q.length);
+  parent.append(text.slice(0, k), m, text.slice(k + q.length));
+}
+// Levels a monster gets: its spawn areas' MonLvlEx where the game uses area level, monstats otherwise
+// Areas that list this monster for difficulty d (Normal: mon/umon, Nightmare & Hell: nmon)
+function spawnAreas(row, d) {
+  const map = d === 0 ? S.spawnMapN : S.spawnMapNH;
+  if (!map) return [];
+  return map.get(msGet(S.ms, row, "Id").trim().toLowerCase()) || [];
+}
+function allSpawnAreas(row) { return [...new Set([...spawnAreas(row, 0), ...spawnAreas(row, 1)])]; }
+function monLevels(row) {
+  const boss = (toInt(msGet(S.ms, row, "boss")) ?? 0) !== 0;
+  const all = boss ? [] : allSpawnAreas(row);
+  let fromArea = false;
+  const parts = [0, 1, 2].map(d => {
+    const areas = boss ? [] : spawnAreas(row, d);
+    if (areas.length && (d > 0 || S.normalPatch)) {
+      fromArea = true;
+      const v = areas.map(a => a.lv[d]).filter(x => x > 0);
+      if (!v.length) return "\u2013";
+      const lo = Math.min(...v), hi = Math.max(...v);
+      return lo === hi ? String(lo) : `${lo}\u2013${hi}`;
+    }
+    const L = msLevel(S.ms, row, d);
+    return L === null ? "\u2013" : String(L);
+  });
+  let why;
+  if (boss) why = "Boss: keeps its monstats.txt levels";
+  else if (all.length) {
+    const nN = spawnAreas(row, 0).length, nH = spawnAreas(row, 1).length;
+    why = `Spawns in ${all.length === 1 ? all[0].name : all.length + " areas"} (Normal lists: ${nN}, Nightmare/Hell lists: ${nH})`;
+  } else why = S.areas ? "Not in any levels.txt spawn list: monstats.txt levels" : "monstats.txt levels (load levels.txt for area levels)";
+  return { text: parts.join(" / "), count: all.length, fromArea, why };
+}
+
+let monOpts = [];
+// "Show all" option at the bottom of a capped list
+function addShowAll(hiddenCount, noun) {
+  const li = document.createElement("li");
+  li.className = "showall"; li.id = "opt" + listItems.length; li.setAttribute("role", "option");
+  li.textContent = `Show all (${hiddenCount} more ${noun})`;
+  const entry = { showAll: true };
+  li.addEventListener("mousedown", e => { e.preventDefault(); choose(entry); });
+  monList.append(li); monOpts.push(li); listItems.push(entry);
+}
+function reopenList(keepScroll) {
+  const top = monList.scrollTop;
+  openList(mon.value === monText() ? "" : mon.value, true);
+  if (keepScroll) monList.scrollTop = top;
+}
+function openList(query, keepAll) {
+  if (!keepAll) S.listAll = false;
+  if (!S.ms) return;
+  if (S.pickMode === "area") return openAreaMonsters(query);
+  const q = query.trim().toLowerCase();
+  const all = [];
+  if (!q) all.push({ row: -1, id: "Manual entry", name: "", low: "" });
+  for (const it of S.items) {
+    if (!q || it.low.includes(q)) { all.push(it); continue; }
+    // Typing an area name finds the monsters that spawn there
+    const via = S.areas ? allSpawnAreas(it.row).find(a => a.low.includes(q)) : null;
+    if (via) all.push({ ...it, area: via, via });
+  }
+  listItems = all.slice(0, S.listAll ? all.length : 250);
+  monList.replaceChildren();
+  monOpts = [];
+  const key = document.createElement("li");
+  key.className = "head"; key.setAttribute("role", "presentation");
+  key.textContent = "Levels: Normal / Nightmare / Hell";
+  monList.append(key);
+  listItems.forEach((it, k) => {
+    const li = document.createElement("li");
+    li.id = "opt" + k; li.setAttribute("role", "option");
+    const a = document.createElement("span"), b = document.createElement("span"), c = document.createElement("span");
+    b.className = "nm"; c.className = "lv";
+    markText(a, it.id, q); markText(b, it.name, q);
+    if (it.via) { const v = document.createElement("span"); v.className = "via"; markText(v, "in " + it.via.name, q); b.append(v); }
+    if (it.row >= 0) {
+      const m = monLevels(it.row);
+      if (m.count > 1) { const sm = document.createElement("small"); sm.textContent = m.count + " areas"; c.append(sm); }
+      c.append(m.text);
+      if (!m.fromArea) c.classList.add("lv-file");
+      li.title = m.why + (it.via ? `. Picking it here also selects ${it.via.name}` : "");
+    }
+    li.append(a, b, c);
+    li.addEventListener("mousedown", e => { e.preventDefault(); choose(it); });
+    monList.append(li);
+    monOpts.push(li);
+  });
+  const shownCount = listItems.length;
+  if (all.length > shownCount) addShowAll(all.length - shownCount, "monsters");
+  if (!all.length) {
+    const li = document.createElement("li");
+    li.className = "more"; li.textContent = "No monsters or areas match";
+    monList.append(li);
+  }
+  active = q ? (listItems.length ? 0 : -1) : Math.max(0, listItems.findIndex(it => it.row === S.row));
+  monList.hidden = false;
+  mon.setAttribute("aria-expanded", "true");
+  highlight();
+}
+// Levels.txt order: each area's header with its MonLvlEx, then its mon1-mon25 monsters
+// Each area's mon1-mon25 monsters with their minion1/minion2 (when different), in levels.txt order
+function areaGroups() {
+  const itemOf = id => { const r = S.ms.byId.get(id.toLowerCase()); return r === undefined ? null : S.items.find(x => x.row === r) || null; };
+  return S.areas.map(a => {
+    const mons = [];
+    for (const id of a.monList) {
+      const it = itemOf(id);
+      if (!it) continue;
+      const minions = [];
+      for (const col of ["minion1", "minion2"]) {
+        const mid = msGet(S.ms, it.row, col).trim();
+        if (!mid || mid.toLowerCase() === it.id.toLowerCase()) continue;
+        const m = itemOf(mid);
+        if (m && !minions.some(x => x.it === m)) minions.push({ it: m, col });
+      }
+      mons.push({ it, minions });
+    }
+    return { a, mons };
+  }).filter(g => g.mons.length);
+}
+
+// Levels.txt order: each area's header with its MonLvlEx, then its monsters. A monster is only
+// pickable at its first appearance; later ones are greyed out and name that first area.
+function openAreaMonsters(query) {
+  const q = query.trim().toLowerCase();
+  monList.replaceChildren();
+  monOpts = [];
+  listItems = [];
+  const note = text => { const li = document.createElement("li"); li.className = "more"; li.textContent = text; monList.append(li); };
+  const row3 = (li, idText, nameText, lvText, lvFaint) => {
+    const x = document.createElement("span"), y = document.createElement("span"), z = document.createElement("span");
+    y.className = "nm"; z.className = "lv";
+    markText(x, idText, q); markText(y, nameText, q);
+    z.textContent = lvText;
+    if (lvFaint) z.classList.add("lv-file");
+    li.append(x, y, z);
+  };
+  const addOpt = (entry, idText, nameText, lvText, lvFaint, title, cls) => {
+    const li = document.createElement("li");
+    if (cls) li.className = cls;
+    li.id = "opt" + listItems.length; li.setAttribute("role", "option");
+    row3(li, idText, nameText, lvText, lvFaint);
+    if (title) li.title = title;
+    li.addEventListener("mousedown", e => { e.preventDefault(); choose(entry); });
+    monList.append(li); monOpts.push(li); listItems.push(entry);
+  };
+  const addDup = (idText, nameText, lvText, first, title, cls) => {
+    const li = document.createElement("li");
+    li.className = "dup" + (cls ? " " + cls : "");
+    li.setAttribute("role", "option"); li.setAttribute("aria-disabled", "true");
+    row3(li, idText, `${nameText} (${first.name})`, lvText, true);
+    li.title = `${title ? title + ". " : ""}First listed in ${first.name}; pick it there`;
+    li.addEventListener("mousedown", e => e.preventDefault());
+    monList.append(li);
+  };
+  if (!S.areas) {
+    note("Load levels.txt to list monsters by area");
+  } else {
+    const groups = areaGroups();
+    // Jump to an act: shows the whole list, then scrolls to that act's first area
+    const acts = [...new Set(groups.map(g => g.a.act).filter(a => a !== null))].sort((x, y) => x - y);
+    if (acts.length > 1) {
+      const row = document.createElement("li");
+      row.className = "acts"; row.setAttribute("role", "presentation");
+      const lab = document.createElement("span"); lab.className = "lab"; lab.textContent = "Jump to";
+      row.append(lab);
+      for (const act of acts) {
+        const btn = document.createElement("button");
+        btn.type = "button"; btn.tabIndex = -1; btn.textContent = `Act ${act + 1}`;
+        btn.addEventListener("mousedown", e => {
+          e.preventDefault();
+          S.listAll = true;
+          reopenList(false);
+          const h = monList.querySelector(`li.ahead[data-act="${act}"]`);
+          if (h) monList.scrollTop = h.offsetTop - monList.querySelector("li.acts").offsetHeight - 4;
+        });
+        row.append(btn);
+      }
+      monList.append(row);
+    }
+    // First appearance of each monster, over the whole unfiltered list
+    const first = new Map();
+    for (const { a, mons } of groups) for (const { it, minions } of mons) {
+      if (!first.has(it.row)) first.set(it.row, { a, key: a.id + "|" });
+      for (const { it: m } of minions) if (!first.has(m.row)) first.set(m.row, { a, key: a.id + "|" + it.id });
+    }
+    if (!q) addOpt({ row: -1 }, "Manual entry", "", "", false, "");
+    let shown = 0, hidden = 0;
+    for (const { a, mons } of groups) {
+      const areaHit = !q || a.low.includes(q);
+      const vis = mons.filter(({ it, minions }) => areaHit || it.low.includes(q) || minions.some(m => m.it.low.includes(q)));
+      if (!vis.length) continue;
+      if (!S.listAll && shown > 400) { hidden += vis.length + vis.reduce((n, m) => n + m.minions.length, 0); continue; }
+      const h = document.createElement("li");
+      h.className = "ahead"; h.setAttribute("role", "presentation");
+      if (a.act !== null) h.dataset.act = a.act;
+      const hn = document.createElement("span"), hl = document.createElement("span");
+      markText(hn, a.name, q); hl.className = "lv"; hl.textContent = a.lv.join(" / ");
+      h.title = `${a.code || a.name} (Id ${a.id}, LevelName ${a.key || "none"}). MonLvlEx Normal / Nightmare / Hell`;
+      h.append(hn, hl); monList.append(h);
+      const levelsIn = row => {
+        const boss = (toInt(msGet(S.ms, row, "boss")) ?? 0) !== 0;
+        return { boss, text: [0, 1, 2].map(d => !boss && (d > 0 || S.normalPatch) ? a.lv[d] : msLevel(S.ms, row, d) ?? "\u2013").join(" / ") };
+      };
+      const put = (item, key, entry, title, cls) => {
+        const L = levelsIn(item.row);
+        const t = [title, L.boss ? "Boss: keeps its monstats.txt levels" : ""].filter(Boolean).join(". ");
+        const f = first.get(item.row);
+        if (f.key === key) addOpt(entry, item.id, item.name, L.text, L.boss, t, cls);
+        else addDup(item.id, item.name, L.text, f.a, t, cls);
+        shown++;
+      };
+      for (const { it, minions } of vis) {
+        put(it, a.id + "|", { ...it, area: a }, "", "");
+        for (const { it: m, col } of minions)
+          put(m, a.id + "|" + it.id, { ...m, area: a, minionOf: it.id }, `Minion of ${it.id} (${col})`, "minion");
+      }
+    }
+    if (hidden) addShowAll(hidden, "entries");
+    if (!monList.querySelector("li:not(.more)")) note("No areas or monsters match");
+  }
+  active = q ? (listItems.length ? 0 : -1)
+             : Math.max(0, listItems.findIndex(it => it.row === S.row));
+  monList.hidden = false;
+  mon.setAttribute("aria-expanded", "true");
+  highlight();
+}
+
+function closeList() {
+  monList.hidden = true;
+  mon.setAttribute("aria-expanded", "false");
+  mon.removeAttribute("aria-activedescendant");
+  active = -1;
+}
+function highlight() {
+  monOpts.forEach((li, k) => li.setAttribute("aria-selected", k === active ? "true" : "false"));
+  if (active >= 0) {
+    mon.setAttribute("aria-activedescendant", "opt" + active);
+    monOpts[active]?.scrollIntoView({ block: "nearest" });
+  } else mon.removeAttribute("aria-activedescendant");
+}
+async function choose(it) {
+  if (it.showAll) {
+    const at = active;
+    S.listAll = true;
+    reopenList(true);
+    active = Math.min(at, listItems.length - 1);
+    highlight();
+    return;
+  }
+  closeList();
+  await requestLoad(it.row, it.area, it.minionOf);
+}
+mon.addEventListener("focus", () => { mon.select(); openList(""); });
+mon.addEventListener("input", () => openList(mon.value));
+// Clicking back into the box after a pick starts a fresh search
+mon.addEventListener("click", () => { if (mon.value === monText()) { mon.select(); if (monList.hidden) openList(""); } });
+mon.addEventListener("blur", () => { closeList(); mon.value = monText(); });
+mon.addEventListener("keydown", e => {
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    if (monList.hidden) openList(mon.value === monText() ? "" : mon.value);
+    else if (active < listItems.length - 1) { active++; highlight(); }
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    if (active > 0) { active--; highlight(); }
+  } else if (e.key === "Enter") {
+    e.preventDefault();
+    if (!monList.hidden && active >= 0) choose(listItems[active]);
+  } else if (e.key === "Escape") {
+    if (!monList.hidden) { e.preventDefault(); closeList(); mon.value = monText(); mon.select(); }
+  }
+});
+
+// ---------- area picker ----------
+const areaIn = $("#area"), areaList = $("#areaList");
+let areaOpts = [], areaActive = -1;
+
+function renderArea() {
+  areaIn.disabled = !S.areas;
+  areaIn.placeholder = S.areas ? "Type to search areas" : "Load levels.txt to pick an area";
+  if (document.activeElement !== areaIn) areaIn.value = S.area ? S.area.name : "";
+  $("#normalPatch").checked = S.normalPatch;
+}
+function openAreas(query) {
+  if (!S.areas) return;
+  const q = query.trim().toLowerCase();
+  const monId = S.row >= 0 ? msGet(S.ms, S.row, "Id").trim() : "";
+  const key = monId.toLowerCase();
+  const match = S.areas.filter(a => !q || a.low.includes(q));
+  const here = key ? match.filter(a => a.spawns.has(key)) : [];
+  const rest = key ? match.filter(a => !a.spawns.has(key)) : match;
+  areaList.replaceChildren();
+  areaOpts = [];
+  const head = text => {
+    const li = document.createElement("li");
+    li.className = "head"; li.setAttribute("role", "presentation"); li.textContent = text;
+    areaList.append(li);
+  };
+  const opt = a => {
+    const li = document.createElement("li");
+    li.id = "aopt" + areaOpts.length; li.setAttribute("role", "option");
+    const x = document.createElement("span"), y = document.createElement("span");
+    y.className = "lv";
+    if (a) {
+      markText(x, a.name, q);
+      y.textContent = a.lv.join(" / ");
+      const lists = key ? [a.spawnsN.has(key) && "Normal", a.spawnsNH.has(key) && "Nightmare and Hell"].filter(Boolean) : [];
+      li.title = `${a.code || a.name} (Id ${a.id}, LevelName ${a.key || "none"}). Levels Normal / Nightmare / Hell` + (lists.length ? `. Lists ${monId} for ${lists.join(" and ")}` : "");
+    } else x.textContent = "No area";
+    li.append(x, y);
+    li.addEventListener("mousedown", e => { e.preventDefault(); chooseArea(a); });
+    areaList.append(li);
+    areaOpts.push({ li, a });
+  };
+  head("Levels: Normal / Nightmare / Hell");
+  if (!q) opt(null);
+  if (here.length) { head(`Where ${monId} spawns`); here.forEach(opt); }
+  if (here.length && rest.length) head("All other areas");
+  rest.forEach(opt);
+  if (!match.length) {
+    const li = document.createElement("li");
+    li.className = "more"; li.textContent = "No areas match";
+    areaList.append(li);
+  }
+  areaActive = q ? (areaOpts.length ? 0 : -1) : Math.max(0, areaOpts.findIndex(o => o.a === S.area));
+  areaList.hidden = false;
+  areaIn.setAttribute("aria-expanded", "true");
+  highlightArea();
+}
+function closeAreas() {
+  areaList.hidden = true;
+  areaIn.setAttribute("aria-expanded", "false");
+  areaIn.removeAttribute("aria-activedescendant");
+  areaActive = -1;
+}
+function highlightArea() {
+  areaOpts.forEach((o, k) => o.li.setAttribute("aria-selected", k === areaActive ? "true" : "false"));
+  if (areaActive >= 0) {
+    areaIn.setAttribute("aria-activedescendant", "aopt" + areaActive);
+    areaOpts[areaActive].li.scrollIntoView({ block: "nearest" });
+  } else areaIn.removeAttribute("aria-activedescendant");
+}
+function chooseArea(a) {
+  closeAreas();
+  S.area = a;
+  S.areaAuto = false;
+  S.minionOf = "";
+  S.spawnNote = "";
+  if (a) store.set("msolver.areaId", String(a.id)); else store.del("msolver.areaId");
+  areaIn.value = a ? a.name : "";
+  applyAutoLevels();
+  if (!a) status("No area selected. Levels come from monstats.txt, or type them yourself.");
+  else if (S.row >= 0) status(loadedMessage());
+  else status(`Levels from ${a.name}: ${a.lv.join(" / ")}.` + (S.normalPatch ? "" : " Normal keeps its own level unless the game is patched."));
+  render();
+}
+areaIn.addEventListener("focus", () => { areaIn.select(); openAreas(""); });
+areaIn.addEventListener("input", () => openAreas(areaIn.value));
+areaIn.addEventListener("click", () => { if (areaIn.value === (S.area ? S.area.name : "")) { areaIn.select(); if (areaList.hidden) openAreas(""); } });
+areaIn.addEventListener("blur", () => { closeAreas(); areaIn.value = S.area ? S.area.name : ""; });
+areaIn.addEventListener("keydown", e => {
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    if (areaList.hidden) openAreas("");
+    else if (areaActive < areaOpts.length - 1) { areaActive++; highlightArea(); }
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    if (areaActive > 0) { areaActive--; highlightArea(); }
+  } else if (e.key === "Enter") {
+    e.preventDefault();
+    if (!areaList.hidden && areaActive >= 0) chooseArea(areaOpts[areaActive].a);
+  } else if (e.key === "Escape") {
+    if (!areaList.hidden) { e.preventDefault(); closeAreas(); areaIn.value = S.area ? S.area.name : ""; areaIn.select(); }
+  }
+});
+function setPickMode(mode) {
+  S.pickMode = mode === "area" ? "area" : "monster";
+  store.set("msolver.pickMode", S.pickMode);
+  document.querySelector(`input[name=pickMode][value=${S.pickMode}]`).checked = true;
+  $(".picker").classList.toggle("bymode", S.pickMode === "area");
+  mon.value = monText();
+}
+document.querySelectorAll("input[name=pickMode]").forEach(r => r.addEventListener("change", () => {
+  setPickMode(r.value);
+  status(S.pickMode === "area"
+    ? (S.areas ? "Each area in levels.txt order, with the monsters from its mon1\u2013mon25 columns. Type to filter by monster or area." : "Load levels.txt to list monsters by area.")
+    : "Pick a monster, then its area.");
+  render();
+}));
+$("#normalPatch").addEventListener("change", e => {
+  S.normalPatch = e.target.checked;
+  store.set("msolver.normalPatch", S.normalPatch ? "1" : "0");
+  applyAutoLevels(0);
+  render();
+});
+
+// Area names: levels.txt LevelName looked up in levels.json (enUS); falls back to the key itself
+function nameAreas() {
+  if (!S.areas) return 0;
+  const map = S.levelNames;
+  const lower = map ? new Map([...map].map(([k, v]) => [k.toLowerCase(), v])) : null;
+  let hits = 0;
+  for (const a of S.areas) {
+    const en = a.key && map ? (map.get(a.key) ?? lower.get(a.key.toLowerCase())) : undefined;
+    if (en) hits++;
+    a.name = (en && en.trim()) || a.key || a.code || "Area " + a.id;
+    a.low = `${a.name} ${a.key} ${a.code} ${a.id}`.toLowerCase();
+  }
+  return hits;
+}
+
+function setLevels(text, name) {
+  try {
+    S.areas = loadLevels(text);
+  } catch (err) {
+    $("#arStatus").className = "err";
+    $("#arStatus").textContent = `${name}: ${err.message}. Choose the game's levels.txt.`;
+    return false;
+  }
+  S.arName = name;
+  nameAreas();
+  const index = key => {
+    const m = new Map();
+    for (const a of S.areas) for (const id of a[key]) { if (!m.has(id)) m.set(id, []); m.get(id).push(a); }
+    return m;
+  };
+  S.spawnMapN = index("spawnsN");
+  S.spawnMapNH = index("spawnsNH");
+  const keep = S.area && S.areas.find(a => a.id === S.area.id);
+  S.area = keep || null;
+  return true;
+}
+function setElemTypes(text, name) {
+  try { S.elemTypes = loadElemTypes(text); }
+  catch (err) {
+    $("#etStatus").className = "err";
+    $("#etStatus").textContent = `${name}: ${err.message}. Choose the game's elemtypes.txt.`;
+    return false;
+  }
+  S.etName = name;
+  return true;
+}
+async function onElemTypesFile(file) {
+  if (!file) return;
+  const text = await readFile(file);
+  if (!setElemTypes(text, file.name)) return;
+  store.set("msolver.elemtypes", JSON.stringify({ name: file.name, data: text }));
+  status(`Loaded ${file.name} with ${S.elemTypes.length} element types.`, "ok");
+  render();
+}
+
+async function onLevelsFile(file) {
+  if (!file) return;
+  const text = await readFile(file);
+  if (!setLevels(text, file.name)) return;
+  store.set("msolver.levels", JSON.stringify({ name: file.name, data: text }));
+  if (S.row >= 0) autoArea(S.row);
+  applyAutoLevels();
+  status(`Loaded ${file.name} with ${S.areas.length} areas.` + (S.spawnNote ? " " + S.spawnNote : " Pick an area to use its monster levels."), "ok");
+  render();
+}
+
+// ---------- dialogs ----------
+function ask(msg, buttons) {
+  return new Promise(res => {
+    const dlg = $("#dlg");
+    $("#dlgMsg").textContent = msg;
+    const bar = $("#dlgBtns");
+    bar.replaceChildren();
+    let done = false;
+    const finish = v => { if (!done) { done = true; if (dlg.open) dlg.close(); res(v); } };
+    buttons.forEach(([label, val, primary]) => {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "btn" + (primary ? " primary" : "");
+      b.textContent = label;
+      b.addEventListener("click", () => finish(val));
+      bar.append(b);
+    });
+    dlg.oncancel = () => finish("cancel");
+    dlg.showModal();
+  });
+}
+
+// ---------- actions ----------
+// The level the game gives this monster in difficulty d, or null if unknown
+const isBoss = () => S.row >= 0 && (toInt(msGet(S.ms, S.row, "boss")) ?? 0) !== 0;
+// The area whose level difficulty d uses: the chosen area, else the one area listing the monster for that difficulty
+function levelArea(d) {
+  if (isBoss() || !(d > 0 || S.normalPatch)) return null;
+  if (S.area) return S.area;
+  if (S.row >= 0) { const a = spawnAreas(S.row, d); if (a.length === 1) return a[0]; }
+  return null;
+}
+function areaDrives(d) { return !!levelArea(d); }
+function autoLevel(d) {
+  const la = levelArea(d);
+  if (la) return la.lv[d] > 0 ? la.lv[d] : null;
+  if (S.row >= 0) return msLevel(S.ms, S.row, d);
+  return null;
+}
+function setLevel(d, v) {
+  el.lvl[d].value = v === null ? "" : String(v);
+  recompute(d);
+  refillUntouched(d); recompute(d);
+}
+function applyAutoLevels(onlyD) {
+  for (let d = 0; d < 3; d++) {
+    if (onlyD !== undefined && d !== onlyD) continue;
+    const v = autoLevel(d);
+    if (v !== null || S.row >= 0) setLevel(d, v);
+  }
+  if (S.linkDiffs) for (let d = 0; d < 3; d++) relinkFrom(d);
+}
+
+function refillUntouched(d) {
+  for (let i = 0; i < STATS.length; i++) {
+    const t = el.tgt[i][d];
+    const link = toInt(t.dataset.linkInput ?? "");
+    if (STATS[i].kind === "DUR" && durLocked(STATS[i].elem)) { t.value = ""; continue; }
+    if (link !== null) { const g = gameNow(i, d, link); if (g !== null) t.value = String(g); continue; }
+    if (t.dataset.user) continue;
+    const r = S.res[i][d];
+    t.value = r.curGameOk ? String(r.curGame) : "";
+  }
+}
+// Give the other difficulties the Input this cell solved to
+function propagate(i, d) {
+  const src = el.tgt[i][d], r = S.res[i][d];
+  for (let e = 0; e < 3; e++) {
+    if (e === d) continue;
+    const t = el.tgt[i][e];
+    if (t.disabled) continue;
+    if (!src.value.trim()) { t.value = ""; t.dataset.user = "1"; delete t.dataset.linkInput; continue; }
+    const g = r.solved ? gameNow(i, e, r.input) : null;
+    if (g === null) continue;
+    t.value = String(g);
+    t.dataset.user = "1";
+    t.dataset.linkInput = String(r.input);
+  }
+}
+// A level change moves the Input of targets typed in difficulty d; pass it on
+function relinkFrom(d) {
+  for (let i = 0; i < STATS.length; i++) {
+    const t = el.tgt[i][d];
+    if (t.dataset.user && !t.dataset.linkInput && t.value.trim()) propagate(i, d);
+  }
+  recomputeAll();
+}
+function unlinkAll() {
+  for (let d = 0; d < 3; d++) for (let i = 0; i < STATS.length; i++) delete el.tgt[i][d].dataset.linkInput;
+}
+function fillFromCurrent() {
+  unlinkAll();
+  for (let d = 0; d < 3; d++) {
+    for (let i = 0; i < STATS.length; i++) delete el.tgt[i][d].dataset.user;
+    refillUntouched(d);
+  }
+  recomputeAll();
+}
+function clearTargets() {
+  unlinkAll();
+  for (let d = 0; d < 3; d++) for (let i = 0; i < STATS.length; i++) { el.tgt[i][d].value = ""; el.tgt[i][d].dataset.user = "1"; }
+  recomputeAll();
+}
+
+// One spawn area: use it. Several: keep the chosen area only if the monster spawns there.
+function autoArea(row) {
+  S.spawnNote = "";
+  if (!S.areas || row < 0 || (toInt(msGet(S.ms, row, "boss")) ?? 0) !== 0) return;
+  const aN = spawnAreas(row, 0), aH = spawnAreas(row, 1), all = allSpawnAreas(row);
+  const id = msGet(S.ms, row, "Id").trim();
+  if (S.minionOf && S.area) {
+    S.spawnNote = `${id} spawns as a minion of ${S.minionOf} in ${S.area.name}, so it uses that area's levels.`;
+    return;
+  }
+  if (!all.length) return;
+  if (all.length === 1) {
+    S.area = all[0];
+    S.areaAuto = true;
+    S.spawnNote = `${id} only spawns in ${S.area.name}, so its levels come from there.`;
+  } else {
+    if (S.area && (S.areaAuto || !all.includes(S.area))) S.area = null;
+    if (S.area) S.spawnNote = `${id} spawns in ${all.length} areas; using ${S.area.name}.`;
+    else if (aH.length === 1 && aN.length === 1)
+      S.spawnNote = `${id} is listed in ${aN[0].name} for Normal and ${aH[0].name} for Nightmare and Hell, so each difficulty uses its own area's level.`;
+    else if (aH.length === 1)
+      S.spawnNote = `${id} is listed only in ${aH[0].name} for Nightmare and Hell, so those use its level; Normal spawns in ${aN.length} areas.`;
+    else S.spawnNote = `${id} spawns in ${all.length} areas. Pick one under Area to use its levels.`;
+  }
+  if (S.area) store.set("msolver.areaId", String(S.area.id)); else store.del("msolver.areaId");
+}
+
+function loadRow(row) {
+  S.row = row;
+  if (row >= 0) {
+    for (let k = 1; k <= 3; k++) S.elType[k] = msElType(S.ms, row, k);
+    loadAIFromRow(row);
+    autoArea(row);
+    for (let d = 0; d < 3; d++) { const L = autoLevel(d); el.lvl[d].value = L === null ? "" : String(L); }
+    recomputeAll();
+    fillFromCurrent();
+    const noR = msNoRatio(S.ms, row);
+    STATS.forEach((_, i) => el.tgt[i].forEach(t => (t.disabled = noR)));
+    el.lvl.forEach(l => (l.disabled = noR));
+    if (noR) status("This monster has noRatio set, so its stats come from its summoning skill. Editing is off.", "warn");
+    else status(loadedMessage());
+  } else {
+    STATS.forEach((_, i) => el.tgt[i].forEach(t => { t.disabled = false; t.dataset.user = "1"; delete t.dataset.linkInput; }));
+    el.lvl.forEach(l => (l.disabled = false));
+    recomputeAll();
+    loadAIFromRow(-1);
+    status("Manual entry. Type a level and targets; Input shows what monstats.txt needs.");
+  }
+  mon.value = monText();
+  render();
+}
+
+function loadedMessage() {
+  const id = msGet(S.ms, S.row, "Id").trim();
+  if (isBoss()) return `Loaded ${id}. Bosses keep their own level, so the area doesn't change it.`;
+  if (S.minionOf && S.area) return `${id} spawns as a minion of ${S.minionOf} in ${S.area.name}, so it uses that area's levels.`;
+  if (S.spawnNote) return S.spawnNote;
+  if (S.area) {
+    const here = S.area.spawns.has(id.toLowerCase());
+    return `Loaded ${id} with levels from ${S.area.name}.` + (here ? "" : ` ${id} isn't in that area's spawn lists.`);
+  }
+  return `Loaded ${id}. Pick its area, or enter the area level, to see real values for regular Nightmare and Hell monsters.`;
+}
+
+function setChosenArea(area, minionOf) {
+  S.area = area;
+  S.areaAuto = false;
+  S.minionOf = minionOf || "";
+  S.spawnNote = "";
+  store.set("msolver.areaId", String(area.id));
+}
+async function requestLoad(row, area, minionOf) {
+  if (row === S.row && row >= 0) {
+    if (area && (area !== S.area || (minionOf || "") !== S.minionOf)) {
+      setChosenArea(area, minionOf);
+      applyAutoLevels();
+      status(loadedMessage());
+      render();
+    }
+    mon.value = monText();
+    return;
+  }
+  const n = pending();
+  if (n > 0) {
+    const id = msGet(S.ms, S.row, "Id").trim();
+    const v = await ask(`${id} has ${n} pending ${n === 1 ? "change" : "changes"} that haven't been applied.`,
+      [["Keep editing", "cancel"], ["Discard", "discard"], ["Apply and switch", "apply", true]]);
+    if (v === "cancel") { mon.value = monText(); return; }
+    if (v === "apply") apply();
+  }
+  if (area) setChosenArea(area, minionOf); else S.minionOf = "";
+  loadRow(row);
+}
+
+function persistMonstats() {
+  S.stored = store.set("msolver.monstats", JSON.stringify({ name: S.msName, data: serializeTsv(S.ms.t), dirty: S.dirty }));
+}
+
+function apply() {
+  if (S.row < 0 || !S.ms || msNoRatio(S.ms, S.row)) return;
+  const row = S.row;
+  let n = 0, skipped = 0, warn = "";
+  if (S.ai !== msGet(S.ms, row, "AI").trim()) { msSet(S.ms, row, "AI", S.ai); n++; }
+  for (const k of AI_COLS) for (let d = 0; d < 3; d++) {
+    const col = k + DIFF_SUFFIX[d];
+    if (S.aiVals[k][d] !== msGet(S.ms, row, col).trim() && msSet(S.ms, row, col, S.aiVals[k][d])) n++;
+  }
+  for (let k = 1; k <= 3; k++) {
+    if (S.elType[k] === msElType(S.ms, row, k)) continue;
+    msSet(S.ms, row, `El${k}Type`, S.elType[k]);
+    n++;
+    if (S.elType[k] && !msGet(S.ms, row, `El${k}Mode`).trim() && !warn)
+      warn = ` El${k}Mode is blank, so El${k} won't trigger until a mode is set.`;
+  }
+  for (let d = 0; d < 3; d++) {
+    STATS.forEach((s, i) => {
+      const r = S.res[i][d];
+      if (r.clear) { if (msSet(S.ms, row, statCol(s, d), "")) n++; return; }
+      if (!r.hasTarget) return;
+      if (!r.solved) { skipped++; return; }
+      if (r.hasCur && r.input === r.curRaw) return;
+      if (!msSet(S.ms, row, statCol(s, d), r.input)) { skipped++; return; }
+      n++;
+      if (s.elem && !S.elType[s.elem] && !warn)
+        warn = ` El${s.elem}Type is None, so that damage won't apply until a type is set.`;
+    });
+    if (S.writeLevel && S.lvl[d] !== null && msLevel(S.ms, row, d) !== S.lvl[d]) {
+      msSet(S.ms, row, "Level" + DIFF_SUFFIX[d], S.lvl[d]);
+      n++;
+    }
+  }
+  if (n) { S.dirty = true; persistMonstats(); }
+  recomputeAll();
+  let msg = `Applied ${n} ${n === 1 ? "value" : "values"} to ${msGet(S.ms, row, "Id").trim()}. Download monstats.txt to use them.`;
+  if (skipped) msg += ` Skipped ${skipped} without a valid level or duration.`;
+  if (!S.stored) msg += " This browser can't keep the edited file, so download it before leaving.";
+  status(msg + warn, skipped || warn || !S.stored ? "warn" : "ok");
+  render();
+}
+
+async function download() {
+  if (!S.ms) return;
+  const n = pending();
+  if (n > 0) {
+    const v = await ask(`${n} pending ${n === 1 ? "change hasn't" : "changes haven't"} been applied yet.`,
+      [["Cancel", "cancel"], ["Download without them", "skip"], ["Apply and download", "apply", true]]);
+    if (v === "cancel") return;
+    if (v === "apply") apply();
+  }
+  const blob = new Blob([textToBytes(serializeTsv(S.ms.t))], { type: "text/plain" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = S.msName || "monstats.txt";
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  status(`Downloaded ${a.download}. Replace the one in your mod's data folder with it.`, "ok");
+}
+
+function setMonLvl(text, name, bundled) {
+  try {
+    S.ml = loadMonLvl(text);
+    S.mlName = name; S.mlBundled = bundled;
+    if (!bundled) store.set("msolver.monlvl", JSON.stringify({ name, data: text }));
+    recomputeAll();
+    render();
+    return true;
+  } catch (err) {
+    $("#lvlStatus").className = "err";
+    $("#lvlStatus").textContent = `${name}: ${err.message}. Choose the game's monlvl.txt.`;
+    return false;
+  }
+}
+
+function setMonStats(text, name, dirty) {
+  try {
+    S.ms = loadMonStats(text);
+  } catch (err) {
+    $("#msStatus").className = "err";
+    $("#msStatus").textContent = `${name}: ${err.message}. Choose the game's monstats.txt.`;
+    return false;
+  }
+  S.msName = name; S.dirty = !!dirty;
+  buildItems();
+  mon.disabled = false;
+  mon.placeholder = "Type to search monsters";
+  loadRow(-1);
+  return true;
+}
+
+async function readFile(file) { return bytesToText(await file.arrayBuffer()); }
+
+// Property files: parse, keep a small copy in the browser, re-render
+const PROP_FILES = {
+  monprop: { card: "mp", label: "MonProp.txt", parse: t => loadMonProp(t), set: (v, n) => { S.monprop = v; S.mpName = n; },
+             status: () => `${S.mpName}, ${S.monprop.size} entries` },
+  props: { card: "pr", label: "properties.txt", parse: t => loadProperties(t), set: (v, n) => { S.props = v; S.prName = n; },
+           status: () => `${S.prName}, ${S.props.size} properties` },
+  isc: { card: "is", label: "itemstatcost.txt", parse: t => loadISC(t), set: (v, n) => { S.isc = v; S.iscName = n; },
+         status: () => `${S.iscName}, ${S.isc.map.size} stats` },
+  skills: { card: "sk", label: "skills.txt", parse: t => loadSkills(t), set: (v, n) => {
+              S.skills = v; S.skName = n;
+              S.skillsById = new Map(v.map(e => [e[0], e])); S.skillsByName = new Map(v.map(e => [e[1].toLowerCase(), e]));
+            }, status: () => `${S.skName}, ${S.skills.length} skills`, keep: v => JSON.stringify(v) },
+  mods: { card: "im", label: "item-modifiers.json", json: true, parse: t => loadLevelStrings(t), set: (v, n) => {
+            S.mods = v; S.modName = n; S.modsLower = new Map([...v].map(([k, x]) => [k.toLowerCase(), x]));
+          }, status: () => `${S.modName}, ${S.mods.size} strings`, keep: v => JSON.stringify([...v]) },
+};
+function setPropFile(kind, text, name, restored) {
+  const f = PROP_FILES[kind];
+  let v;
+  try { v = restored !== undefined ? restored : f.parse(text); }
+  catch (err) {
+    const el = $(`#${f.card}Status`);
+    el.className = "err"; el.textContent = `${name}: ${err.message}. Choose the game's ${f.label}.`;
+    return false;
+  }
+  f.set(v, name);
+  return true;
+}
+async function onPropFile(kind, file) {
+  const f = PROP_FILES[kind];
+  const text = f.json ? new TextDecoder("utf-8").decode(await file.arrayBuffer()) : await readFile(file);
+  if (!setPropFile(kind, text, file.name)) return false;
+  const v = kind === "skills" ? S.skills : kind === "mods" ? S.mods : null;
+  store.set("msolver.pf." + kind, JSON.stringify({ name: file.name, data: f.keep ? null : text, kept: f.keep ? f.keep(v) : null }));
+  return true;
+}
+function restorePropFiles() {
+  for (const [kind, f] of Object.entries(PROP_FILES)) {
+    let saved = null;
+    try { saved = JSON.parse(store.get("msolver.pf." + kind) || "null"); } catch {}
+    if (!saved) continue;
+    if (saved.kept) {
+      const v = JSON.parse(saved.kept);
+      setPropFile(kind, null, saved.name, kind === "mods" ? new Map(v) : v);
+    } else if (saved.data) setPropFile(kind, saved.data, saved.name);
+  }
+}
+function renderPropFiles() {
+  for (const f of Object.values(PROP_FILES)) {
+    const has = { mp: S.monprop, pr: S.props, is: S.isc, sk: S.skills, im: S.mods }[f.card];
+    if (!has) continue;
+    const el = $(`#${f.card}Status`);
+    el.className = "ok"; el.textContent = f.status();
+  }
+}
+
+function setMonAI(text, name) {
+  try { S.monai = loadMonAI(text); }
+  catch (err) {
+    $("#aiStatus").className = "err";
+    $("#aiStatus").textContent = `${name}: ${err.message}. Choose the game's monai.txt.`;
+    return false;
+  }
+  S.maName = name;
+  return true;
+}
+async function onMonAIFile(file) {
+  if (!file) return;
+  const text = await readFile(file);
+  if (!setMonAI(text, file.name)) return;
+  store.set("msolver.monai", JSON.stringify({ name: file.name, data: text }));
+  status(`Loaded ${file.name} with ${S.monai.length} AI types. Hover the AI column names to see what they do.`, "ok");
+  render();
+}
+
+function setMonNames(map, name) {
+  S.monNames = map;
+  S.monNamesLower = new Map([...map].map(([k, v]) => [k.toLowerCase(), v]));
+  S.mnName = name;
+  buildItems();
+}
+async function onMonNamesFile(file) {
+  if (!file) return;
+  let map;
+  try { map = loadLevelStrings(new TextDecoder("utf-8").decode(await file.arrayBuffer())); }
+  catch (err) {
+    $("#mnStatus").className = "err";
+    $("#mnStatus").textContent = `${file.name}: ${err.message}. Choose the game's monsters.json.`;
+    return;
+  }
+  setMonNames(map, file.name);
+  store.set("msolver.monnames", JSON.stringify({ name: file.name, map: [...map] }));
+  status(`Loaded ${file.name}.` + (S.ms ? " Monster names now show in English." : " Load monstats.txt to see the names."), "ok");
+  mon.value = monText();
+  render();
+}
+
+function setLevelNames(map, name) {
+  S.levelNames = map;
+  S.lnName = name;
+  nameAreas();
+}
+async function onLevelNamesFile(file) {
+  if (!file) return;
+  let map;
+  try { map = loadLevelStrings(new TextDecoder("utf-8").decode(await file.arrayBuffer())); }
+  catch (err) {
+    $("#lnStatus").className = "err";
+    $("#lnStatus").textContent = `${file.name}: ${err.message}. Choose the game's levels.json.`;
+    return;
+  }
+  setLevelNames(map, file.name);
+  store.set("msolver.levelnames", JSON.stringify({ name: file.name, map: [...map] }));
+  const hits = S.areas ? nameAreas() : 0;
+  status(`Loaded ${file.name}.` + (S.areas ? ` ${hits} of ${S.areas.length} area names found.` : " Load levels.txt to see the names."), "ok");
+  mon.value = monText();
+  render();
+}
+
+async function onMonstatsFile(file) {
+  if (!file) return;
+  if (S.dirty || pending() > 0) {
+    const v = await ask("The current monstats.txt has edits that haven't been downloaded. Replace it anyway?",
+      [["Cancel", "cancel"], ["Replace", "replace", true]]);
+    if (v !== "replace") return;
+  }
+  const text = await readFile(file);
+  if (setMonStats(text, file.name, false)) {
+    persistMonstats();
+    status(`Loaded ${file.name} with ${S.ms.order.length} monsters. Type in the Monster box to find one.`, "ok");
+    render();
+  }
+}
+async function loadMonstatsQuiet(file) {
+  const text = await readFile(file);
+  if (setMonStats(text, file.name, false)) persistMonstats();
+}
+async function onMonlvlFile(file) {
+  if (!file) return;
+  if (setMonLvl(await readFile(file), file.name, false)) status(`Loaded ${file.name}.`, "ok");
+}
+
+// ---------- data folder ----------
+// Files the page reads from a D2R data folder, in load order (monstats.txt last so names and areas apply to it)
+const DATA_FILES = [
+  { name: "monlvl.txt", dir: "global/excel", el: "lvlStatus", has: () => S.ml && !S.mlBundled, load: onMonlvlFile,
+    unload: () => { store.del("msolver.monlvl"); if (BUNDLED_MONLVL) setMonLvl(BUNDLED_MONLVL, "monlvl.txt", true); } },
+  { name: "levels.txt", dir: "global/excel", el: "arStatus", has: () => !!S.areas, load: onLevelsFile,
+    unload: () => { S.areas = null; S.area = null; S.spawnMapN = S.spawnMapNH = null; store.del("msolver.levels"); store.del("msolver.areaId"); } },
+  { name: "elemtypes.txt", dir: "global/excel", el: "etStatus", has: () => !!S.etName, load: onElemTypesFile,
+    unload: () => { S.elemTypes = ELEM_TYPES_DEFAULT; S.etName = ""; store.del("msolver.elemtypes"); } },
+  { name: "monai.txt", dir: "global/excel", el: "aiStatus", has: () => !!S.monai, load: onMonAIFile,
+    unload: () => { S.monai = null; S.maName = ""; store.del("msolver.monai"); } },
+  { name: "monprop.txt", dir: "global/excel", el: "mpStatus", has: () => !!S.monprop, load: f => onPropFile("monprop", f),
+    unload: () => { S.monprop = null; store.del("msolver.pf.monprop"); } },
+  { name: "properties.txt", dir: "global/excel", el: "prStatus", has: () => !!S.props, load: f => onPropFile("props", f),
+    unload: () => { S.props = null; store.del("msolver.pf.props"); } },
+  { name: "itemstatcost.txt", dir: "global/excel", el: "isStatus", has: () => !!S.isc, load: f => onPropFile("isc", f),
+    unload: () => { S.isc = null; store.del("msolver.pf.isc"); } },
+  { name: "skills.txt", dir: "global/excel", el: "skStatus", has: () => !!S.skills, load: f => onPropFile("skills", f),
+    unload: () => { S.skills = null; store.del("msolver.pf.skills"); } },
+  { name: "levels.json", dir: "local/lng/strings", el: "lnStatus", has: () => !!S.levelNames, load: onLevelNamesFile,
+    unload: () => { S.levelNames = null; nameAreas(); store.del("msolver.levelnames"); } },
+  { name: "monsters.json", dir: "local/lng/strings", el: "mnStatus", has: () => !!S.monNames, load: onMonNamesFile,
+    unload: () => { S.monNames = S.monNamesLower = null; store.del("msolver.monnames"); } },
+  { name: "item-modifiers.json", dir: "local/lng/strings", el: "imStatus", has: () => !!S.mods, load: f => onPropFile("mods", f),
+    unload: () => { S.mods = null; store.del("msolver.pf.mods"); } },
+  { name: "monstats.txt", dir: "global/excel", el: "msStatus", has: () => !!S.ms, load: loadMonstatsQuiet },
+];
+const dfMissing = new Set();
+// Best match for one file: <dir>/<name> anywhere under the selection, else the bare name; shortest path wins
+function findDataFile(entries, df) {
+  const want = `${df.dir}/${df.name}`.toLowerCase();
+  const byPath = entries.filter(e => e.path === want || e.path.endsWith("/" + want));
+  const pool = byPath.length ? byPath : entries.filter(e => e.path === df.name.toLowerCase() || e.path.endsWith("/" + df.name.toLowerCase()));
+  return pool.sort((a, b) => a.path.length - b.path.length)[0] || null;
+}
+async function onDataFolder(entries) {
+  if (!entries.length) return;
+  if (S.dirty || pending() > 0) {
+    const v = await ask("The current monstats.txt has edits that haven't been downloaded. Load the new folder anyway?",
+      [["Cancel", "cancel"], ["Load folder", "load", true]]);
+    if (v !== "load") return;
+  }
+  const root = entries[0].path.split("/")[0];
+  const msDf = DATA_FILES.find(df => df.name === "monstats.txt");
+  if (!findDataFile(entries, msDf)) {
+    const msg = $("#dfStatus");
+    msg.textContent = `${root} doesn't contain global/excel/monstats.txt. Select your mod's data folder.`;
+    msg.className = "err";
+    status("That folder isn't a data folder; nothing was changed.", "warn");
+    return;
+  }
+  const found = [], missing = [], bad = [];
+  status(`Reading ${root}\u2026`);
+  for (const df of DATA_FILES) {
+    const hit = findDataFile(entries, df);
+    // Files this mod doesn't have are cleared, so data from an earlier folder never mixes in
+    if (!hit) { if (df.unload) df.unload(); dfMissing.add(df.el); missing.push(df.name); continue; }
+    dfMissing.delete(df.el);
+    try { const ok = await df.load(hit.file); if (ok === false || !df.has()) bad.push(df.name); else found.push(df.name); }
+    catch { bad.push(df.name); }
+  }
+  const msg = $("#dfStatus");
+  const parts = [`Loaded ${found.length} of ${DATA_FILES.length} files from ${root}.`];
+  if (missing.length) parts.push(`Not found: ${missing.join(", ")}.`);
+  if (bad.length) parts.push(`Couldn't read: ${bad.join(", ")}.`);
+  msg.textContent = parts.join(" ");
+  msg.className = bad.length ? "warn" : "ok";
+  if (missing.length || bad.length) $("#dfList").open = true;
+  if (S.ms) status(`Loaded ${S.ms.order.length} monsters from ${root}. Type in the Monster box to find one.`, "ok");
+  render();
+}
+// Walk a dropped folder (DataTransferItem entries) into { path, file } pairs
+async function walkEntry(entry, prefix, out) {
+  if (entry.isFile) {
+    const file = await new Promise((res, rej) => entry.file(res, rej));
+    out.push({ path: (prefix + entry.name).toLowerCase(), file });
+  } else if (entry.isDirectory) {
+    const reader = entry.createReader();
+    for (;;) {
+      const batch = await new Promise((res, rej) => reader.readEntries(res, rej));
+      if (!batch.length) break;
+      for (const e of batch) await walkEntry(e, prefix + entry.name + "/", out);
+    }
+  }
+}
+function wireDataFolder() {
+  const input = $("#dfInput"), panel = $("#dataPanel");
+  input.addEventListener("change", () => {
+    const entries = [...input.files].map(file => ({ path: (file.webkitRelativePath || file.name).replace(/\\/g, "/").toLowerCase(), file }));
+    input.value = "";
+    onDataFolder(entries);
+  });
+  panel.addEventListener("dragover", e => { e.preventDefault(); panel.classList.add("drag"); });
+  panel.addEventListener("dragleave", () => panel.classList.remove("drag"));
+  panel.addEventListener("drop", async e => {
+    e.preventDefault(); panel.classList.remove("drag");
+    const out = [];
+    for (const item of [...e.dataTransfer.items]) {
+      const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
+      if (entry) await walkEntry(entry, "", out);
+    }
+    onDataFolder(out);
+  });
+}
+function renderDataFolder() {
+  for (const df of DATA_FILES) {
+    if (df.has() || !dfMissing.has(df.el)) continue;
+    const el = $("#" + df.el);
+    el.className = "miss";
+    el.textContent = df.name === "monlvl.txt" ? "Not found; using the built-in copy" : "Not found in the selected folder";
+  }
+}
+
+function wireFileCard(card, input, handler) {
+  input.addEventListener("change", () => { handler(input.files[0]); input.value = ""; });
+  card.addEventListener("dragover", e => { e.preventDefault(); card.classList.add("drag"); });
+  card.addEventListener("dragleave", () => card.classList.remove("drag"));
+  card.addEventListener("drop", e => {
+    e.preventDefault(); card.classList.remove("drag");
+    handler(e.dataTransfer.files[0]);
+  });
+}
+
+// ---------- start ----------
+buildGrid();
+buildAITable();
+wireDataFolder();
+$("#fill").addEventListener("click", () => { fillFromCurrent(); render(); });
+$("#clear").addEventListener("click", () => { clearTargets(); render(); });
+$("#writeLevel").addEventListener("change", e => { S.writeLevel = e.target.checked; render(); });
+$("#linkDiffs").addEventListener("change", e => {
+  S.linkDiffs = e.target.checked;
+  store.set("msolver.linkDiffs", S.linkDiffs ? "1" : "0");
+  status(S.linkDiffs ? "Difficulties linked: changing a target gives the other two difficulties the same Input."
+                     : "Difficulties unlinked: each difficulty is solved on its own.");
+  render();
+});
+$("#apply").addEventListener("click", apply);
+$("#download").addEventListener("click", download);
+$("#forget").addEventListener("click", async () => {
+  const v = await ask("Remove the saved monlvl.txt, monstats.txt, levels.txt, levels.json, monsters.json, monai.txt, elemtypes.txt and the property files from this browser? Download first if you want to keep your edits.",
+    [["Cancel", "cancel"], ["Forget files", "forget", true]]);
+  if (v !== "forget") return;
+  ["monlvl", "monstats", "levels", "areaId", "elemtypes", "levelnames", "monnames", "monai", "pf.monprop", "pf.props", "pf.isc", "pf.skills", "pf.mods"].forEach(k => store.del("msolver." + k));
+  location.reload();
+});
+document.addEventListener("keydown", e => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") { e.preventDefault(); download(); }
+});
+window.addEventListener("beforeunload", e => {
+  if (pending() > 0 || (S.dirty && !S.stored)) { e.preventDefault(); e.returnValue = ""; }
+});
+
+(function init() {
+  S.manualName = store.get("msolver.manualName") || "";
+  S.normalPatch = store.get("msolver.normalPatch") === "1";
+  setPickMode(store.get("msolver.pickMode") || "monster");
+  S.linkDiffs = store.get("msolver.linkDiffs") === "1";
+  let et = null;
+  try { et = JSON.parse(store.get("msolver.elemtypes") || "null"); } catch {}
+  if (et) setElemTypes(et.data, et.name);
+  $("#linkDiffs").checked = S.linkDiffs;
+  restorePropFiles();
+  let maj = null;
+  try { maj = JSON.parse(store.get("msolver.monai") || "null"); } catch {}
+  if (maj) setMonAI(maj.data, maj.name);
+  let mnj = null;
+  try { mnj = JSON.parse(store.get("msolver.monnames") || "null"); } catch {}
+  if (mnj && Array.isArray(mnj.map)) setMonNames(new Map(mnj.map), mnj.name);
+  let lnj = null;
+  try { lnj = JSON.parse(store.get("msolver.levelnames") || "null"); } catch {}
+  if (lnj && Array.isArray(lnj.map)) setLevelNames(new Map(lnj.map), lnj.name);
+  let lv = null;
+  try { lv = JSON.parse(store.get("msolver.levels") || "null"); } catch {}
+  if (lv && setLevels(lv.data, lv.name)) {
+    const aid = toInt(store.get("msolver.areaId") || "");
+    S.area = aid === null ? null : S.areas.find(a => a.id === aid) || null;
+  }
+  let cached = null;
+  try { cached = JSON.parse(store.get("msolver.monlvl") || "null"); } catch {}
+  if (!(cached && setMonLvl(cached.data, cached.name, false)) && BUNDLED_MONLVL) setMonLvl(BUNDLED_MONLVL, "monlvl.txt", true);
+  let ms = null;
+  try { ms = JSON.parse(store.get("msolver.monstats") || "null"); } catch {}
+  if (ms && setMonStats(ms.data, ms.name, ms.dirty)) {
+    status(`Restored ${ms.name} from this browser` + (ms.dirty ? ", including your applied edits." : "."), "ok");
+  } else {
+    recomputeAll();
+    status("Choose monstats.txt to pick monsters, or type a level and targets for manual entry.");
+  }
+  if (S.row < 0 && S.area) applyAutoLevels();
+  render();
+})();
+</script>
+</body>
+</html>
